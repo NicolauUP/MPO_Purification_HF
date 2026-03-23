@@ -1,0 +1,5 @@
+.vscode/
+data/
+*.csv
+*.hdf5
+*.png

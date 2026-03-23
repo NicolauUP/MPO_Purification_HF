@@ -1,0 +1,4 @@
+name = "MPO_MeanField"
+uuid = "5ef1587e-7cf5-4a86-8532-77b9aebd82b1"
+authors = ["NicolauUP <up201805451@up.pt>"]
+version = "0.1.0"
