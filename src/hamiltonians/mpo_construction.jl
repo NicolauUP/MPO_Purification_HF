@@ -1,5 +1,6 @@
 # src/hamiltonian/mpo_construction.jl
 
+export build_hopping_chain
 # -------------------------------------
 # 1D Chain - uniform hopping t::Float64
 # -------------------------------------
