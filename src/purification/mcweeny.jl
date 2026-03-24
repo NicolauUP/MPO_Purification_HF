@@ -26,7 +26,7 @@ and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
 Returns the purified density matrix ρ, or a partially purified ρ with a
 warning if convergence fails.
 """
-function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10,max_steps::Int=40, verbose::Int=1)
+function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10, max_steps::Int=40, verbose::Int=1)
     
     
     use_mcweeny = false
