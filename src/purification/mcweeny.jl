@@ -26,8 +26,9 @@ and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
 Returns the purified density matrix ρ, or a partially purified ρ with a
 warning if convergence fails.
 """
-function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10,
-                               max_steps::Int=40, verbose::Int=1)
+function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10,max_steps::Int=40, verbose::Int=1)
+    
+    
     use_mcweeny = false
     ρ_old = nothing
     T2_old = 0.0
@@ -57,8 +58,8 @@ function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10,
 
         if verbose > 0
             println("  Trace (Ne)           : $T1")
-            println("  Rel Idempotency Error: $idem_error")
-            println("  Rel Change in MPO    : $mpo_rel_change")
+            println("  Rel Idempotency Error (%): $(idem_error * 100)")
+            println("  Rel Change in MPO (%)   : $(mpo_rel_change * 100)")
         end
 
         # Convergence check
@@ -68,9 +69,9 @@ function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10,
         end
 
         # Safe break — MPO stuck but not idempotent
-        if mpo_rel_change < 1e-8 && idem_error > 1e-2
+        if mpo_rel_change < 1e-8 && idem_error > 0.1/100 # Idempotency error larger than 0.1% but MPO is no longer changing!
             @warn "Purification stuck: MPO is no longer changing (mpo_rel_change < 1e-8) " *
-                  "but idempotency error is still large (idem_error = $idem_error). " *
+                  "but idempotency error is still large (idem_error = $(idem_error*100) %). " *
                   "Consider increasing maxχ (current: $maxχ)."
             break
         end
@@ -82,7 +83,7 @@ function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10,
         truncate!(P3; cutoff=ϵ, maxdim=maxχ)
 
         if verbose > 0
-            println("  χ_1: ", maxlinkdim(ρ0),
+            println(" χ_1: ", maxlinkdim(ρ0),
                     " χ_2: ", maxlinkdim(P2),
                     " χ_3: ", maxlinkdim(P3))
         end
