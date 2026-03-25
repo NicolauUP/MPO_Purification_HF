@@ -2,7 +2,7 @@
 
 julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "36c79621b78233ec32f51e97d77a7005a4cad991"
+project_hash = "3c0c7d9d1ae4fd6ae645e0aaf47de04c31d8b48d"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
@@ -310,6 +310,26 @@ git-tree-sha1 = "9c3149243abb5bc0bad0431d6c4fcac0f4443c7c"
 uuid = "f0d1745a-41c9-11e9-1dd9-e5d34d218721"
 version = "1.6.0"
 
+[[deps.ITensorMPS]]
+deps = ["Adapt", "Compat", "ITensors", "IsApprox", "KrylovKit", "LinearAlgebra", "NDTensors", "Printf", "Random", "SerializedElementArrays", "TupleTools"]
+git-tree-sha1 = "87f561eba7f138aea267f0f993522f87cc05e58f"
+uuid = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
+version = "0.3.45"
+
+    [deps.ITensorMPS.extensions]
+    ITensorMPSChainRulesCoreExt = "ChainRulesCore"
+    ITensorMPSHDF5Ext = "HDF5"
+    ITensorMPSObserversExt = "Observers"
+    ITensorMPSPackageCompilerExt = "PackageCompiler"
+    ITensorMPSZygoteRulesExt = ["ChainRulesCore", "ZygoteRules"]
+
+    [deps.ITensorMPS.weakdeps]
+    ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+    HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+    Observers = "338f10d5-c7f1-4033-a7d1-f9dec39bcaa0"
+    PackageCompiler = "9b87118b-4619-50d2-8e1e-99f35a4d4d9d"
+    ZygoteRules = "700de1a5-db45-46bc-99cf-38207098b444"
+
 [[deps.ITensors]]
 deps = ["Adapt", "BitIntegers", "ChainRulesCore", "Compat", "Dictionaries", "DocStringExtensions", "Functors", "IsApprox", "LinearAlgebra", "NDTensors", "Pkg", "Printf", "Random", "Requires", "SerializedElementArrays", "SimpleTraits", "SparseArrays", "StaticArrays", "Strided", "TimerOutputs", "TupleTools", "Zeros"]
 git-tree-sha1 = "dddbf4567e926a17b84c4b9c9b78cd2daf053478"
@@ -381,6 +401,16 @@ version = "2.0.0"
 git-tree-sha1 = "a3f24677c21f5bbe9d2a714f95dcd58337fb2856"
 uuid = "82899510-4779-5014-852e-03e436cf321d"
 version = "1.0.0"
+
+[[deps.KrylovKit]]
+deps = ["LinearAlgebra", "PackageExtensionCompat", "Printf", "Random", "VectorInterface"]
+git-tree-sha1 = "6dcba71deb016d646f1c1bcfcaacc764a198b8e6"
+uuid = "0b1a1467-8014-51b9-945f-bf0ae24f4b77"
+version = "0.10.2"
+weakdeps = ["ChainRulesCore"]
+
+    [deps.KrylovKit.extensions]
+    KrylovKitChainRulesCoreExt = "ChainRulesCore"
 
 [[deps.LibCURL]]
 deps = ["LibCURL_jll", "MozillaCACerts_jll"]
