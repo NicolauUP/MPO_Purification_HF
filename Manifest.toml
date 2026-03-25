@@ -2,7 +2,7 @@
 
 julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "3c0c7d9d1ae4fd6ae645e0aaf47de04c31d8b48d"
+project_hash = "981e72e4feab3dcc370e58cea84d23bcf47cb4bb"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
@@ -207,6 +207,12 @@ version = "1.6.0"
 git-tree-sha1 = "abe83f3a2f1b857aac70ef8b269080af17764bbe"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
 version = "1.16.0"
+
+[[deps.DataStructures]]
+deps = ["OrderedCollections"]
+git-tree-sha1 = "e357641bb3e0638d353c4b29ea0e40ea644066a6"
+uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
+version = "0.19.3"
 
 [[deps.DataValueInterfaces]]
 git-tree-sha1 = "bfc1187b79289637fa0ef6d4436ebdfe6905cbd6"
@@ -553,6 +559,30 @@ deps = ["Unicode"]
 uuid = "de0858da-6303-5e67-8744-51eddeeeb8d7"
 version = "1.11.0"
 
+[[deps.QuadGK]]
+deps = ["DataStructures", "LinearAlgebra"]
+git-tree-sha1 = "9da16da70037ba9d701192e27befedefb91ec284"
+uuid = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+version = "2.11.2"
+
+    [deps.QuadGK.extensions]
+    QuadGKEnzymeExt = "Enzyme"
+
+    [deps.QuadGK.weakdeps]
+    Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
+
+[[deps.QuanticsGrids]]
+deps = ["LinearAlgebra"]
+git-tree-sha1 = "ae0eea18762a145ad9c10dc41f4f93cd6c88f48d"
+uuid = "634c7f73-3e90-4749-a1bd-001b8efc642d"
+version = "0.7.2"
+
+[[deps.QuanticsTCI]]
+deps = ["BitIntegers", "LinearAlgebra", "QuanticsGrids", "TensorCrossInterpolation"]
+git-tree-sha1 = "18622427df3aa9c708fb9ddc1ce7bb8d8a816151"
+uuid = "b11687fd-3a1c-4c41-97d0-998ab401d50e"
+version = "0.7.3"
+
 [[deps.Random]]
 deps = ["SHA"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
@@ -723,6 +753,16 @@ version = "1.12.1"
 deps = ["ArgTools", "SHA"]
 uuid = "a4e569a6-e804-4fa4-b0f3-eef7a1d5b13e"
 version = "1.10.0"
+
+[[deps.TensorCrossInterpolation]]
+deps = ["BitIntegers", "EllipsisNotation", "LinearAlgebra", "QuadGK", "Random"]
+git-tree-sha1 = "8a51c1019f5d49af4a5466df971ff4325f95d789"
+uuid = "b261b2ec-6378-4871-b32e-9173bb050604"
+version = "0.9.19"
+weakdeps = ["ITensorMPS", "ITensors"]
+
+    [deps.TensorCrossInterpolation.extensions]
+    TCIITensorConversion = ["ITensors", "ITensorMPS"]
 
 [[deps.Test]]
 deps = ["InteractiveUtils", "Logging", "Random", "Serialization"]
