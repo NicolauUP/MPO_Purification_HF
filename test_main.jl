@@ -1,14 +1,12 @@
-# test_pi_modulation.jl
 using ITensors, ITensorMPS
-using QuanticsTCI, TensorCrossInterpolation
+using Quantics, QuanticsTCI
 import TensorCrossInterpolation as TCI
-import QuanticsTCI: Quantics
+using TCIITensorConversion
 
 include("src/core/operators.jl")
 include("src/core/system.jl")
 include("src/utils/quantics.jl")
 include("src/tci/modulations.jl")
-
 # System parameters
 L  = 8
 n  = 1
@@ -18,6 +16,7 @@ W  = nothing
 
 sys = System(1, n, t, U, W, L)
 
+show(sys)
 # Build π-modulation MPO
 W0  = 1.0
 mpo = build_pi_modulation(sys, W0; ϵ=1e-10)
