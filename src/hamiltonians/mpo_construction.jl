@@ -32,22 +32,37 @@ function _build_translation_chain(sites; cutoff,maxdim)
 return T_R_MPO, T_L_MPO
 end
 
-function build_H0(sites, params)
+function build_W(sites, params)
+    if !isnothing(params.W)
+        _, W_MPO, _ = Quantics_TCI(params.W, Float64, sites, 1e-6)
+        return W_MPO
+    else
+        return nothing
+    end
+end
+
+
+function build_H0(sites, params; cutoff=1e-10, maxdim=100)
     T_R, T_L = _build_translation_chain(sites; cutoff=1e-10, maxdim=100)
     H0 = nothing
     if params.t isa Number
         H0 = params.t * (T_R + T_L)
     elseif params.t isa Function
-        #= 
-        TODO: Obtain the MPO of function t(x)
-        =#
         T_MPO = Quantics_TCI(params.t, Float64, sites, 1e-6)[1] #[1] gets the MPO!
+        #=
+        TODO: 
+            -HOW TO HANDLE TRUNCATION ERROR IN THE TCI? NOW FIXED TO 1e-6, BUT MAYBE WE WANT TO PASS IT AS A PARAMETER?!!!!!
+        =#
         H0 = apply(T_MPO, +(T_R, T_L; cutoff=cutoff, maxdim=maxdim), cutoff=cutoff, maxdim=maxdim)
     end
 
     if !isnothing(params.W)
         W_MPO = build_W(sites, params)
+        if isnothing(H0)
+            H0 = W_MPO
+        else
         H0 = +(H0, W_MPO; cutoff=cutoff, maxdim=maxdim)
+        end
     end
     return H0
 end
