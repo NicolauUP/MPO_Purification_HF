@@ -11,7 +11,7 @@ include("src/core/operators.jl")
 include("src/core/system.jl")
 include("src/hamiltonians/mpo_construction.jl")
 include("src/utils/quantics.jl")
-# include("src/purification/mcweeny.jl")
+include("src/purification/mcweeny.jl")
 # include("src/tci/modulations.jl")
 
 println("="^50)
@@ -21,14 +21,16 @@ println("="^50)
 # 1. System construction
 # ─────────────────────────────────────────
 println("\n--- Test 1: System Construction ---")
-L = 4
-t(x) = 1.0 * cos(pi * √5 * (x+0.5))
+L = 6
+t = -1.0
 U = 0.0
 W(x) = 0.5 * cos(π * x) 
 tci_tol = 1e-6
 itensors_tol = 1e-10
 itensors_maxdim = 100
-params = ModelParameters(L, t, U, W, tci_tol, itensors_tol, itensors_maxdim)
+density = 0.5
+purification_steps = 40
+params = ModelParameters(L, t, U, W, tci_tol, itensors_tol, itensors_maxdim, density, purification_steps)
 sys = System(params)
 println("System constructed successfully:")
 println()
@@ -53,4 +55,11 @@ end
 
 # 3. Purification Check
 
+ρ0 = construct_rho_0(sys,params, -3.0,3.0)
+println("\n--- Test 3: Purification Check ---")
+ρ_purified = perform_purification(ρ0, params; verbose=1)
 
+for i in 1:2^L
+    val = MatrixChecker(ρ_purified, sys.sites, i-1, i-1)
+    println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " i-1 i-1 val)
+end

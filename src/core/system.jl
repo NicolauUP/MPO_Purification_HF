@@ -8,6 +8,8 @@ struct ModelParameters{Tt, Tu, Tw}
     tci_tol::Float64
     itensors_tol::Float64
     itensors_maxdim::Int
+    density::Float64
+    purification_steps::Int
 end
 
 struct System{P}

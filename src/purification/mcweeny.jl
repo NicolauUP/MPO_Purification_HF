@@ -5,15 +5,19 @@
 Build the initial density matrix guess by linearly mapping the
 eigenvalues of H into [0,1] with the correct electron count Ne.
 """
-function construct_rho_0(sys::System, H::MPO, ϵ::Float64, maxχ::Int,
-                          H_max::Float64, H_min::Float64, Ne::Int)
+function construct_rho_0(sys::System, params::ModelParameters ,H_max::Float64, H_min::Float64)
     N = length(sys.sites)
+    Ne = round(Int, N * params.density)
     Id = Identity_MPO(sys.sites)   # built internally!
-    μ = real(tr(H) / N)
+    μ = real(tr(sys.H0) / N) #Technically it should then sum the mean field Hamiltonian. 
+    #= 
+    TODO:
+        - Add the mean field structure !
+    =#
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
     coeff_I = (Ne + λ * μ) / N
     coeff_H = -(λ / N)
-    return +(coeff_I * Id, coeff_H * H; cutoff=ϵ, maxdim=maxχ)
+    return +(coeff_I * Id, coeff_H * sys.H0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 end
 
 
@@ -26,7 +30,7 @@ and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
 Returns the purified density matrix ρ, or a partially purified ρ with a
 warning if convergence fails.
 """
-function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10, max_steps::Int=40, verbose::Int=1)
+function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
     
     
     use_mcweeny = false
@@ -35,13 +39,13 @@ function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10, max_s
     idem_error = Inf
     mpo_rel_change = Inf
 
-    for i in 1:max_steps
+    for i in 1:params.purification_steps
         if verbose > 0
             println("--- Step $i ---")
         end
 
-        P2 = apply(ρ0, ρ0; cutoff=ϵ, maxdim=maxχ)
-        truncate!(P2; cutoff=ϵ, maxdim=maxχ)
+        P2 = apply(ρ0, ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        truncate!(P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         T1 = real(tr(ρ0))
         T2 = real(tr(P2))
@@ -79,8 +83,8 @@ function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10, max_s
         ρ_old = copy(ρ0)
         T2_old = T2
 
-        P3 = apply(ρ0, P2; cutoff=ϵ, maxdim=maxχ)
-        truncate!(P3; cutoff=ϵ, maxdim=maxχ)
+        P3 = apply(ρ0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        truncate!(P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         if verbose > 0
             println(" χ_1: ", maxlinkdim(ρ0),
@@ -102,23 +106,23 @@ function perform_purification(ρ0::MPO; maxχ::Int=100, ϵ::Float64=1e-10, max_s
         end
 
         if use_mcweeny
-            ρ0 = +(3.0 * P2, -2.0 * P3; cutoff=ϵ, maxdim=maxχ)
+            ρ0 = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         else
             if cn < 0.5
                 inv_fac = 1.0 / (1.0 - cn)
                 c1 = (1 - 2cn) * inv_fac
                 c2 = (1 + cn) * inv_fac
                 c3 = -1.0 * inv_fac
-                ρ0 = +(c1 * ρ0, c2 * P2, c3 * P3; cutoff=ϵ, maxdim=maxχ)
+                ρ0 = +(c1 * ρ0, c2 * P2, c3 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
             else
                 inv_fac = 1.0 / cn
                 c2 = (1.0 + cn) * inv_fac
                 c3 = -1.0 * inv_fac
-                ρ0 = +(c2 * P2, c3 * P3; cutoff=ϵ, maxdim=maxχ)
+                ρ0 = +(c2 * P2, c3 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
             end
         end
 
-        truncate!(ρ0; cutoff=ϵ, maxdim=maxχ)
+        truncate!(ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     end
 
     @warn "Purification did not converge after $max_steps steps. " *
