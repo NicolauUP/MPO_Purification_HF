@@ -1,30 +1,36 @@
 
 
-export System
-struct System{Tt, Tu, Tw}
-    d     :: Int
-    n     :: Int
-    sites :: Vector{Index{Int64}}
-    t     :: Tt
-    U     :: Tu
-    W     :: Tw
+struct ModelParameters{Tt, Tu, Tw}
+    L::Int
+    t::Tt #Type of the hopping, maybe either a number or a function to be used with TCI
+    U::Tu #Type of the interaction
+    W::Tw #Type of the potential.
 end
 
-function System(d::Int, n::Int, t::Tt, U::Tu, W::Tw, L::Int) where {Tt, Tu, Tw}
-    if L % n != 0
-        throw(ArgumentError("L=$L must be divisible by n=$n"))
-    end
-    sites = siteinds("Qubit", L)
-    return System{Tt, Tu, Tw}(d, n, sites, t, U, W)
+struct System{P}
+    params::P
+    sites::Vector{Index{Int64}}
+    H0::MPO
+    W::Union{Nothing, MPO}
+    H_static::MPO # This is just H0 + W
 end
 
 
-function Base.show(io::IO, sys::System)
-    L = length(sys.sites)
-    println(io, "System:")
-    println(io, "  d     = $(sys.d)D")
-    println(io, "  L     = $L sites (n=$(sys.n) sublattices)")
-    println(io, "  t     :: $(typeof(sys.t))")
-    println(io, "  U     :: $(typeof(sys.U))")
-    println(io, "  W     :: $(typeof(sys.W))")
+function QuantumSystem(params)
+    sites = siteinds("Qubit", params.L)
+    H0 = build_H0(sites, params)
+    W = isnothing(params.W)  ? nothing : build_W(sites, params)
+    H_static = isnothing(params.W) ? H0 : H0 + W  
+    return System(params, sites, H0, W, H_static)
 end
+
+
+
+
+
+
+#=
+
+TODO: 
+    - Add a method for Base.show to print the system
+=#
