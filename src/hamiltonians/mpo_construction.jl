@@ -45,14 +45,16 @@ function build_H0(sites, params)
     T_R, T_L = _build_translation_chain(sites)
     H0 = nothing
     if params.t isa Number
+        println("Using constant hopping t = $(params.t)")
         H0 = params.t * (T_R + T_L)
     elseif params.t isa Function
-        T_MPO = Quantics_TCI(params.t, Float64, sites, params.tci_tol)[1] #[1] gets the MPO!
-        #=
-        TODO: 
-            -HOW TO HANDLE TRUNCATION ERROR IN THE TCI? NOW FIXED TO 1e-6, BUT MAYBE WE WANT TO PASS IT AS A PARAMETER?!!!!!
-        =#
-        H0 = apply(T_MPO, +(T_R, T_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim), cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        println("Using function hopping t(x) = $(params.t)")
+        _, T_MPO,_ = Quantics_TCI(params.t, Float64, sites, params.tci_tol)
+        
+        H_T_R = apply(T_MPO, T_R; cutoff = params.itensors_tol, maxdim = params.itensors_maxdim)
+        H_T_L = apply(T_L, ITensors.dag(T_MPO); cutoff = params.itensors_tol, maxdim = params.itensors_maxdim) 
+        H0 = +(H_T_R, H_T_L; cutoff = params.itensors_tol, maxdim = params.itensors_maxdim)
+
     end
 
     if !isnothing(params.W)

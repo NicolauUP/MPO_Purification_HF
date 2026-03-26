@@ -5,6 +5,7 @@ using Quantics, QuanticsTCI
 using TCIITensorConversion
 import TensorCrossInterpolation as TCI
 using LinearAlgebra
+using Printf
 
 include("src/core/operators.jl")
 include("src/core/system.jl")
@@ -21,10 +22,13 @@ println("="^50)
 # ─────────────────────────────────────────
 println("\n--- Test 1: System Construction ---")
 L = 4
-t = 1.0
+t(x) = 1.0 * cos(pi * √5 * (x+0.5))
 U = 0.0
 W(x) = 0.5 * cos(π * x) 
-params = ModelParameters(L, t, U, W)
+tci_tol = 1e-6
+itensors_tol = 1e-10
+itensors_maxdim = 100
+params = ModelParameters(L, t, U, W, tci_tol, itensors_tol, itensors_maxdim)
 sys = System(params)
 println("System constructed successfully:")
 println()
@@ -44,5 +48,9 @@ for i in 1:2^L
     end
     println()
 end
+
+
+
+# 3. Purification Check
 
 

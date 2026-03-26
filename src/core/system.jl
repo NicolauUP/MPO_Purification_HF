@@ -32,4 +32,6 @@ function Base.show(io::IO, sys::System)
     println(io, "  ├─ Interaction (U): $(typeof(sys.params.U))")
     println(io, "  ├─ Potential (W): $(isnothing(sys.params.W) ? "None" : typeof(sys.params.W))")
     println(io, "  └─ TCI Precision: $(sys.params.tci_tol)")
+    println(io, "  ├─ ITensors Precision: $(sys.params.itensors_tol)")
+    println(io, "  └─ ITensors MaxDim: $(sys.params.itensors_maxdim)")
 end
