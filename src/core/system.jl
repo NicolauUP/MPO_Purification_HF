@@ -5,40 +5,31 @@ struct ModelParameters{Tt, Tu, Tw}
     t::Tt #Type of the hopping, maybe either a number or a function to be used with TCI
     U::Tu #Type of the interaction
     W::Tw #Type of the potential.
+    tci_tol::Float64
+    itensors_tol::Float64
+    itensors_maxdim::Int
 end
 
 struct System{P}
     params::P
     sites::Vector{Index{Int64}}
-    H0::MPO
-    W::Union{Nothing, MPO}
-    H_static::MPO # This is just H0 + W
+    H0::MPO # This is just H0 + W
 end
 
-
-function System(params)
+function System(params::ModelParameters)
     sites = ITensors.siteinds("Qubit", params.L)
+    
 
-    H_static = build_H0(sites, params) #W is passed inside!
-
-
-    return System(params, sites, H0, W, H_static)
+    H_static = build_H0(sites, params)
+    
+    return System{typeof(params)}(params, sites, H_static)
 end
-
-
-
 
 
 function Base.show(io::IO, sys::System)
-    println(io, "System:")
-    println(io, "L: ", sys.params.L)
-    println(io, "Type of t: ", typeof(sys.params.t))
-    println(io, "Type of U: ", typeof(sys.params.U))
-    println(io, "Type of W: ", typeof(sys.params.W))
+    println(io, "System (L=$(sys.params.L))")
+    println(io, "  ├─ Hopping (t): $(typeof(sys.params.t))")
+    println(io, "  ├─ Interaction (U): $(typeof(sys.params.U))")
+    println(io, "  ├─ Potential (W): $(isnothing(sys.params.W) ? "None" : typeof(sys.params.W))")
+    println(io, "  └─ TCI Precision: $(sys.params.tci_tol)")
 end
-
-#=
-
-TODO: 
-    - Add a method for Base.show to print the system
-=#

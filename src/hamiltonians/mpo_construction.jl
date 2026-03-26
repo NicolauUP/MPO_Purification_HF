@@ -2,9 +2,8 @@
 
 
 
-function _build_translation_chain(sites; cutoff,maxdim)
+function _build_translation_chain(sites)
     L = length(sites)
-
     T_R_opsum = OpSum()
     T_L_opsum = OpSum()
 
@@ -34,7 +33,7 @@ end
 
 function build_W(sites, params)
     if !isnothing(params.W)
-        _, W_MPO, _ = Quantics_TCI(params.W, Float64, sites, 1e-6)
+        _, W_MPO, _ = Quantics_TCI(params.W, Float64, sites, params.tci_tol)
         return W_MPO
     else
         return nothing
@@ -42,18 +41,18 @@ function build_W(sites, params)
 end
 
 
-function build_H0(sites, params; cutoff=1e-10, maxdim=100)
-    T_R, T_L = _build_translation_chain(sites; cutoff=1e-10, maxdim=100)
+function build_H0(sites, params)
+    T_R, T_L = _build_translation_chain(sites)
     H0 = nothing
     if params.t isa Number
         H0 = params.t * (T_R + T_L)
     elseif params.t isa Function
-        T_MPO = Quantics_TCI(params.t, Float64, sites, 1e-6)[1] #[1] gets the MPO!
+        T_MPO = Quantics_TCI(params.t, Float64, sites, params.tci_tol)[1] #[1] gets the MPO!
         #=
         TODO: 
             -HOW TO HANDLE TRUNCATION ERROR IN THE TCI? NOW FIXED TO 1e-6, BUT MAYBE WE WANT TO PASS IT AS A PARAMETER?!!!!!
         =#
-        H0 = apply(T_MPO, +(T_R, T_L; cutoff=cutoff, maxdim=maxdim), cutoff=cutoff, maxdim=maxdim)
+        H0 = apply(T_MPO, +(T_R, T_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim), cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     end
 
     if !isnothing(params.W)
@@ -61,7 +60,7 @@ function build_H0(sites, params; cutoff=1e-10, maxdim=100)
         if isnothing(H0)
             H0 = W_MPO
         else
-        H0 = +(H0, W_MPO; cutoff=cutoff, maxdim=maxdim)
+        H0 = +(H0, W_MPO; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         end
     end
     return H0

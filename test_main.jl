@@ -8,9 +8,9 @@ using LinearAlgebra
 
 include("src/core/operators.jl")
 include("src/core/system.jl")
-# include("src/hamiltonians/mpo_construction.jl")
+include("src/hamiltonians/mpo_construction.jl")
+include("src/utils/quantics.jl")
 # include("src/purification/mcweeny.jl")
-# include("src/utils/quantics.jl")
 # include("src/tci/modulations.jl")
 
 println("="^50)
@@ -23,10 +23,26 @@ println("\n--- Test 1: System Construction ---")
 L = 4
 t = 1.0
 U = 0.0
-W = nothing
+W(x) = 0.5 * cos(π * x) 
 params = ModelParameters(L, t, U, W)
 sys = System(params)
 println("System constructed successfully:")
 println()
 show(sys)
+
+
+
+# 2. MPO check
+println("\n--- Test 2: MPO Check ---")
+H0 = sys.H0
+for i in 1:2^L
+    for j in 1:2^L
+        val = MatrixChecker(H0, sys.sites, i-1, j-1) # -1 because of 0-based indexing in binary representation
+        if abs(val) > 1e-6
+            print(@sprintf "<%.0f|H0|%.0f> = %8.3f   " i-1 j-1 val)
+        end
+    end
+    println()
+end
+
 
