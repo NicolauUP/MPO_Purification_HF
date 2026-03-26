@@ -28,6 +28,13 @@ end
 
 
 
+function Base.show(io::IO, sys::System)
+    println(io, "System:")
+    println(io, "L: ", L)
+    println(io, "Type of t: ", sys.params.t)
+    println(io, "Type of U: ", sys.params.U)
+    println(io, "Type of W: ", sys.params.W)
+end
 
 #=
 
