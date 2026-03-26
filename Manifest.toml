@@ -2,7 +2,7 @@
 
 julia_version = "1.11.4"
 manifest_format = "2.0"
-project_hash = "35641528017f6a64eaf4aa9a8b0b896d481a937c"
+project_hash = "a7bf888df6b4de4227fa49842df6470d499956c2"
 
 [[deps.Accessors]]
 deps = ["CompositionsBase", "ConstructionBase", "Dates", "InverseFunctions", "MacroTools"]
@@ -623,6 +623,11 @@ deps = ["SHA"]
 uuid = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 version = "1.11.0"
 
+[[deps.Reexport]]
+git-tree-sha1 = "45e428421666073eab6f2da5c9d310d99bb12f9b"
+uuid = "189a3867-3050-52da-a836-e630ba90ab69"
+version = "1.2.2"
+
 [[deps.Referenceables]]
 deps = ["Adapt"]
 git-tree-sha1 = "02d31ad62838181c1a3a5fd23a1ce5914a643601"
@@ -778,6 +783,12 @@ version = "0.4.6"
 deps = ["Artifacts", "Libdl", "libblastrampoline_jll"]
 uuid = "bea87d4a-7f5b-5778-9afe-8cc45184846c"
 version = "7.7.0+0"
+
+[[deps.TCIITensorConversion]]
+deps = ["ITensorMPS", "ITensors", "Reexport", "TensorCrossInterpolation"]
+git-tree-sha1 = "dc04a486dcfd145852090865a68f0560f3714ace"
+uuid = "9f0aa9f4-9415-4e6a-8795-331ebf40aa04"
+version = "0.2.1"
 
 [[deps.TOML]]
 deps = ["Dates"]

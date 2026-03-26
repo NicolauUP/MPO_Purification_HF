@@ -58,7 +58,7 @@ function build_H0_chain(sys::System{Tt,Tu,Nothing}; cutoff=1e-10, maxdim=100) wh
     return build_hopping_chain(sys; cutoff=cutoff, maxdim=maxdim)
 end
 
-function build_H0_chain(sys::System{Tt,Tu,MPO}; cutoff=1e-10, maxdim=100) where {Tu,Tv}
+function build_H0_chain(sys::System{Tt,Tu,MPO}; cutoff=1e-10, maxdim=100) where {Tt,Tu}
     H_hop = build_hopping_chain(sys; cutoff=cutoff, maxdim=maxdim)
     return +(H_hop,  sys.W; cutoff=cutoff, maxdim=maxdim)
 end
