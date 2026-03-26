@@ -16,9 +16,9 @@ struct System{P}
 end
 
 
-function QuantumSystem(params)
-    sites = siteinds("Qubit", params.L)
-    H0 = build_H0(sites, params)
+function System(params)
+    sites = ITensors.siteinds("Qubit", params.L)
+    H0 = MPO(sites,"Id")
     W = isnothing(params.W)  ? nothing : build_W(sites, params)
     H_static = isnothing(params.W) ? H0 : H0 + W  
     return System(params, sites, H0, W, H_static)
@@ -30,10 +30,10 @@ end
 
 function Base.show(io::IO, sys::System)
     println(io, "System:")
-    println(io, "L: ", L)
-    println(io, "Type of t: ", sys.params.t)
-    println(io, "Type of U: ", sys.params.U)
-    println(io, "Type of W: ", sys.params.W)
+    println(io, "L: ", sys.params.L)
+    println(io, "Type of t: ", typeof(sys.params.t))
+    println(io, "Type of U: ", typeof(sys.params.U))
+    println(io, "Type of W: ", typeof(sys.params.W))
 end
 
 #=
