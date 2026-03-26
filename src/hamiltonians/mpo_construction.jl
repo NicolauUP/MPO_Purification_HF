@@ -1,6 +1,6 @@
 # src/hamiltonian/mpo_construction.jl
 
-export build_hopping_chain
+
 
 function _build_translation_chain(sites; cutoff,maxdim)
     L = length(sites)
@@ -31,34 +31,23 @@ function _build_translation_chain(sites; cutoff,maxdim)
 
 return T_R_MPO, T_L_MPO
 end
-# -------------------------------------
-# 1D Chain - uniform hopping t::Float64
-# -------------------------------------
 
-function build_hopping_chain(sys::System{Float64, Tu, Tw}; cutoff=1e-10, maxdim=100) where {Tu,Tw}
-   T_R, T_L = _build_translation_chain(sys.sites; cutoff=cutoff, maxdim=maxdim)
-   return +(sys.t * T_R, sys.t * T_L; cutoff=cutoff, maxdim=maxdim)
-end
+function build_H0(sites, params)
+    T_R, T_L = _build_translation_chain(sites; cutoff=1e-10, maxdim=100)
+    H0 = nothing
+    if params.t isa Number
+        H0 = params.t * (T_R + T_L)
+    elseif params.t isa Function
+        #= 
+        TODO: Obtain the MPO of function t(x)
+        =#
+        T_MPO = Quantics_TCI(params.t, Float64, sites, 1e-6)[1] #[1] gets the MPO!
+        H0 = apply(T_MPO, +(T_R, T_L; cutoff=cutoff, maxdim=maxdim), cutoff=cutoff, maxdim=maxdim)
+    end
 
-
-# -------------------------------------
-# 1D Chain - modulated hopping t::MPO 
-# -------------------------------------
-
-function build_hopping_chain(sys::System{MPO, Tu, Tw}; cutoff=1e-10, maxdim=100) where {Tu,Tw}
-    T_R, T_L = _build_translation_chain(sys.sites; cutoff=cutoff, maxdim=maxdim)
-    T_R_mod = apply(sys.t, T_R; cutoff=cutoff, maxdim=maxdim)
-    T_L_mod = apply(sys.t, T_L; cutoff=cutoff, maxdim=maxdim)
-    return +(T_R_mod, T_L_mod; cutoff=cutoff, maxdim=maxdim)
-end
-
-
-
-function build_H0_chain(sys::System{Tt,Tu,Nothing}; cutoff=1e-10, maxdim=100) where {Tt,Tu}
-    return build_hopping_chain(sys; cutoff=cutoff, maxdim=maxdim)
-end
-
-function build_H0_chain(sys::System{Tt,Tu,MPO}; cutoff=1e-10, maxdim=100) where {Tt,Tu}
-    H_hop = build_hopping_chain(sys; cutoff=cutoff, maxdim=maxdim)
-    return +(H_hop,  sys.W; cutoff=cutoff, maxdim=maxdim)
+    if !isnothing(params.W)
+        W_MPO = build_W(sites, params)
+        H0 = +(H0, W_MPO; cutoff=cutoff, maxdim=maxdim)
+    end
+    return H0
 end
