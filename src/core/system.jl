@@ -18,9 +18,10 @@ end
 
 function System(params)
     sites = ITensors.siteinds("Qubit", params.L)
-    H0 = MPO(sites,"Id")
-    W = isnothing(params.W)  ? nothing : build_W(sites, params)
-    H_static = isnothing(params.W) ? H0 : H0 + W  
+
+    H_static = build_H0(sites, params) #W is passed inside!
+
+
     return System(params, sites, H0, W, H_static)
 end
 
