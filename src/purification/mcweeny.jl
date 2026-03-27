@@ -6,7 +6,7 @@ Build the initial density matrix guess by linearly mapping the
 eigenvalues of H into [0,1] with the correct electron count Ne.
 """
 function construct_rho_0(sys::System, params::ModelParameters ,H_max::Float64, H_min::Float64)
-    N = length(sys.sites)
+    N = 2^length(sys.sites)
     Ne = round(Int, N * params.density)
     Id = Identity_MPO(sys.sites)   # built internally!
     μ = real(tr(sys.H0) / N) #Technically it should then sum the mean field Hamiltonian. 
@@ -125,8 +125,8 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         truncate!(ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     end
 
-    @warn "Purification did not converge after $max_steps steps. " *
+    @warn "Purification did not converge after $(params.purification_steps) steps. " *
           "Final idempotency error: $idem_error. " *
-          "Consider increasing max_steps or maxχ (current: $maxχ)."
+          "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
     return ρ0
 end
