@@ -22,9 +22,9 @@ println("="^50)
 
 
 println("\n--- Test 1: System Construction ---")
-L = 4
+L = 6
 t = -1.0
-U = 4.0
+U = 0.5
 W = nothing
 S(x) = 0.5 * cos(pi * x)
 
@@ -33,7 +33,7 @@ itensors_tol = 1e-10
 itensors_maxdim = 100
 density = 0.5
 purification_steps = 100
-scf_mixing = 0.3
+scf_mixing = 1.0 
 scf_tol = 0.1 #%
 scf_max_iterations = 100
 
@@ -44,8 +44,8 @@ println("System constructed successfully:")
 
 show(sys)
 
-H_min = -15.0
-H_max = 15.0
+H_min = -50.0
+H_max = 50.0
 
 run_scf!(sys,H_min,H_max, verbose=:all)
 print("\nSCF procedure completed. Final Hartree potential values:\n")
@@ -53,7 +53,7 @@ for i in 1:2^L
     val = MatrixChecker(sys.VH, sys.sites, i , i , sys.bra_states, sys.ket_states)
     val2 = MatrixChecker(sys.ρ, sys.sites, i , i , sys.bra_states, sys.ket_states)
     if abs(val) > 1e-6
-        println(@sprintf "<%.0f|VH|%.0f> = %8.3f   " i-1 i-1 val)
+        # println(@sprintf "<%.0f|VH|%.0f> = %8.3f   " i-1 i-1 val)
         println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " i-1 i-1 val2)
 
     end

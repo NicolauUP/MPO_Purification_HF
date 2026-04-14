@@ -23,7 +23,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
         sys.ρ = ρ_purified #Ok updates rho!
         # Step 2: Extract Hartree potential
         vh_mpo = extract_hartree_mpo_1d(sys)
-        
+        vf_mpo = extract_fock_mpo_1d(sys) 
+
 
         # Step 3: Mix with previous potential
         # Step 4: Check convergence        
@@ -39,8 +40,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
 
         if iter == 1
             sys.VH = vh_mpo
+            sys.VF = vf_mpo
         else
             sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
+            sys.VF = +(sys.params.scf_mixing * vf_mpo, (1 - params.scf_mixing) * sys.VF; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
         end 
 
         if iter > 1 && rel_change * 100 < params.scf_tol
@@ -49,6 +52,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
                 println("\nSCF Converged in $iter iterations with relative change $(rel_change * 100) %\n")
             end
             sys.VH = vh_mpo # Final update to ensure we return the most accurate VH
+            sys.VF = vf_mpo # Final update to ensure we return the most accurate VF
             break
         end
     end

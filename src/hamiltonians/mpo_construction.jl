@@ -79,3 +79,30 @@ function build_seed(sites, params)
     end
     return HS
 end
+
+
+# src/hamiltonians/mpo_construction.jl
+
+function build_fock(sys::System)
+    sites = sys.sites
+    params = sys.params
+    
+    # 1. Get the bond-order coefficients via TCI
+    fe = FockEvaluator1D(sys)
+    _, F_MPO, _ = Quantics_TCI(x -> fe(x), Float64, sites, params.tci_tol)
+    
+    # 2. Re-use your hopping MPO logic
+    # T_R and T_L are the bare sum_{i} c†_{i+1}c_i and sum_{i} c†_i c_{i+1}
+    T_R, T_L = _build_translation_chain(sites) # Assuming this helper exists
+    
+    # 3. Apply the spatial modulation (The "Fock Hopping")
+    # This creates sum_i F(i) * c†_{i+1}c_i
+    VF_R = apply(F_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    
+    # This creates sum_i F(i) * c†_i c_{i+1} (The h.c. part)
+    # Since F(i) is real, dag(F_MPO) == F_MPO
+    VF_L = apply(T_L, ITensors.dag(F_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    
+    # Sum them to get the Hermitian Fock MPO
+    return +(VF_R, VF_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+end

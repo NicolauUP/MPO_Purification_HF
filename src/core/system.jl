@@ -21,6 +21,7 @@ mutable struct System{P}
     sites::Vector{Index{Int64}}
     H0::MPO # This is just H0 + W
     VH::MPO # Dynamic: Hartree Potential
+    VF::MPO # Dynamic: Fock Potential
     ρ::MPO # Dynamic: Density Matrix
 
     bra_states::Any
@@ -35,7 +36,7 @@ function System(params::ModelParameters)
     H_static = build_H0(sites, params)
 
     VH_init = build_seed(sites, params)
-
+    VF_init = Identity_MPO(sites) * 0.0 # We start with no Fock potential, but we could also build a seed for it.
     rho_init = Identity_MPO(sites) * 0.0 #nothing
 
     bra, ket = precompute_qtt_states(sites)
@@ -45,6 +46,7 @@ function System(params::ModelParameters)
         sites,
         H_static,
         VH_init,
+        VF_init,
         rho_init,
         bra,
         ket
