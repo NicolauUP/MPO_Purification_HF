@@ -24,7 +24,7 @@ println("\n--- Test 1: System Construction ---")
 L = 6
 t = -1.0
 U = 0.0
-W(x) = 1e-10
+W(x) = 0.5 * cos(π * x)
 tci_tol = 1e-6
 itensors_tol = 1e-10
 itensors_maxdim = 100
@@ -38,13 +38,14 @@ show(sys)
 
 #Esta cadeira é bem melhor que a minha
 
+bra_cache, ket_cache = precompute_qtt_states(sys.sites)
 
 # 2. MPO check
 println("\n--- Test 2: MPO Check ---")
 H0 = sys.H0
 for i in 1:2^L
     for j in 1:2^L
-        val = MatrixChecker(H0, sys.sites, i - 1, j - 1) # -1 because of 0-based indexing in binary representation
+        val = MatrixChecker(H0, sys.sites, i , j , bra_cache, ket_cache)
         if abs(val) > 1e-6
             print(@sprintf "<%.0f|H0|%.0f> = %8.3f   " i-1 j-1 val)
         end
@@ -60,9 +61,16 @@ end
 println("\n--- Test 3: Purification Check ---")
 ρ_purified = perform_purification(ρ0, params; verbose=1)
 
-bra_cache, ket_cache = precompute_qtt_states(sys.sites)
 
 for i in 1:2^L
-    val = MatrixChecker(ρ_purified, sys.sites, i - 1, i - 1,bra_cache, ket_cache) # Check diagonal elements (expecting values close to 0 or 1)
+    @time val = MatrixChecker(ρ_purified, sys.sites, i , i ,bra_cache, ket_cache) # Check diagonal elements (expecting values close to 0 or 1)
+
+    println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " i - 1 i - 1 val)
+end
+
+
+for i in 1:2^L
+    @time val = MatrixChecker(ρ_purified, sys.sites, i , i) # Check diagonal elements (expecting values close to 0 or 1)
+
     println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " i - 1 i - 1 val)
 end

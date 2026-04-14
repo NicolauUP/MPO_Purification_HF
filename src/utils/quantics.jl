@@ -1,45 +1,4 @@
 # src/utils/quantics.jl
-
-"""
-    Convert_To_Binary(n, NSites)
-
-Convert an integer n to a binary string vector of length NSites.
-Example: Convert_To_Binary(3, 4) = ["0", "0", "1", "1"]
-"""
-function Convert_To_Binary(n::Int64, NSites::Int64)
-    bits = last(bitstring(n), NSites)
-    VectorString = String[]
-    for i in bits
-        push!(VectorString, string(i))
-    end
-    return VectorString
-end
-
-
-"""
-    BasisStateMPS(n, sites)
-
-Create the computational basis MPS |n⟩ for integer n
-in the binary representation of the Hilbert space.
-"""
-function BasisStateMPS(n::Int64, sites::Vector{<:Index})
-    return MPS(sites, Convert_To_Binary(n, length(sites)))
-end
-
-
-"""
-    MatrixChecker(mpo, sites, i, j)
-
-Evaluate the matrix element ⟨i|MPO|j⟩ between computational
-basis states |i⟩ and |j⟩ specified by their integer indices.
-Useful for debugging and verifying MPO constructions.
-"""
-function MatrixChecker(mpo::MPO, sites::Vector{<:Index}, i::Int64, j::Int64)
-    Ψ_i = BasisStateMPS(i, sites)
-    Ψ_j = BasisStateMPS(j, sites)
-    return inner(Ψ_i', mpo, Ψ_j)
-end
-
 function precompute_qtt_states(sites::Vector{<:Index})
     L = length(sites)
     
