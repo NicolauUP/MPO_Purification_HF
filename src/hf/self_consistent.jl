@@ -3,7 +3,7 @@
 function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:nothing) 
     if verbose == :all
         println("Starting SCF iterations with parameters:")
-        println("  Max Iterations: $(sys.params.max_iterations)")
+        println("  Max Iterations: $(sys.params.scf_max_iterations)")
         println("  Convergence Tolerance: $(sys.params.scf_tol)")
         println("  Mixing Parameter: $(sys.params.scf_mixing)")
     end
@@ -11,13 +11,13 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
 
     converged = false
     rel_change = Inf
-    for iter in 1:params.max_iterations
+    for iter in 1:params.scf_max_iterations
         if verbose == :all
             println("SCF Iteration $iter")
 
         end
         # Step 1: Obtain density matrix!
-        ρ0 = construct_ρ0(sys, params, H_min, H_max)
+        ρ0 = construct_rho_0(sys, params, H_min, H_max)
         ρ_purified = perform_purification(ρ0, params; verbose=verbose == :all ? 1 : 0)
         sys.ρ = ρ_purified
         # Step 2: Extract Hartree potential

@@ -14,7 +14,7 @@ include("../src/utils/quantics.jl")
 include("../src/purification/mcweeny.jl")
 include("../src/tci/modulations.jl")
 include("../src/tci/density_matrix.jl")
-
+include("../src/hf/self_consistent.jl")
 
 println("="^50)
 println("HartreeFockMPO — Test Suite")
