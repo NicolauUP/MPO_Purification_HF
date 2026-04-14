@@ -16,6 +16,11 @@ mutable struct System{P}
     params::P
     sites::Vector{Index{Int64}}
     H0::MPO # This is just H0 + W
+    VH::MPO # Dynamic: Hartree Potential
+    ρ::MPO # Dynamic: Density Matrix
+
+    bra_states::Any
+    ket_states::Any
 end
 
 
@@ -24,17 +29,32 @@ function System(params::ModelParameters)
     
 
     H_static = build_H0(sites, params)
+
+    VH_init = IdentityMPO(sites) * 0.0 #nothing
+
+    rho_init = IdentityMPO(sites) * 0.0 #nothing
+
+    bra, ket = precompute_qtt_states(sites)
     
-    return System{typeof(params)}(params, sites, H_static)
+    return System{typeof(params)}(
+        params,
+        sites,
+        H_static,
+        VH_init,
+        rho_init,
+        bra,
+        ket
+    )
 end
-
-
 function Base.show(io::IO, sys::System)
     println(io, "System (L=$(sys.params.L))")
     println(io, "  ├─ Hopping (t): $(typeof(sys.params.t))")
     println(io, "  ├─ Interaction (U): $(typeof(sys.params.U))")
     println(io, "  ├─ Potential (W): $(isnothing(sys.params.W) ? "None" : typeof(sys.params.W))")
-    println(io, "  └─ TCI Precision: $(sys.params.tci_tol)")
+    println(io, "  ├─ TCI Precision: $(sys.params.tci_tol)")
     println(io, "  ├─ ITensors Precision: $(sys.params.itensors_tol)")
     println(io, "  └─ ITensors MaxDim: $(sys.params.itensors_maxdim)")
+    println(io, "  [Dynamic State]")
+    println(io, "  ├─ VH MaxLinkDim: $(maxlinkdim(sys.VH))")
+    println(io, "  └─ ρ MaxLinkDim:  $(maxlinkdim(sys.rho))")
 end
