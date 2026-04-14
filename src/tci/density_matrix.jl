@@ -1,4 +1,5 @@
 
+export extract_hartree_mpo_1d
 struct HartreeEvaluate1D
     sys::System
 end
@@ -13,7 +14,7 @@ function (he::HartreeEvaluate1D)(i_float::Real)
 
     for j in neighbors
         if i <= j <= 2^L
-            n_j = MatrixChecker(he.sys.rho, 
+            n_j = MatrixChecker(he.sys.ρ, 
                                 he.sys.sites,
                                  j,
                                  j,

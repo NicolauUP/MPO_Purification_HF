@@ -67,3 +67,15 @@ function build_H0(sites, params)
     end
     return H0
 end
+
+
+function build_seed(sites, params)
+    HS = nothing
+    
+    if !isnothing(params.S)
+        println("Using seed for TCI: $(params.S)")
+        _, S_MPO, _ = Quantics_TCI(params.S, Float64, sites, params.tci_tol)
+        HS = S_MPO
+    end
+    return HS
+end

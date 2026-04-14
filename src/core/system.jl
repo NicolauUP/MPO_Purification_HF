@@ -1,10 +1,11 @@
 
 
-struct ModelParameters{Tt, Tu, Tw}
+struct ModelParameters{Tt, Tu, Tw, Ts}
     L::Int
     t::Tt #Type of the hopping, maybe either a number or a function to be used with TCI
     U::Tu #Type of the interaction
     W::Tw #Type of the potential.
+    S::Ts #Type of the seed for TCI
     tci_tol::Float64
     itensors_tol::Float64
     itensors_maxdim::Int
@@ -30,9 +31,9 @@ function System(params::ModelParameters)
 
     H_static = build_H0(sites, params)
 
-    VH_init = IdentityMPO(sites) * 0.0 #nothing
+    VH_init = build_seed(sites, params)
 
-    rho_init = IdentityMPO(sites) * 0.0 #nothing
+    rho_init = Identity_MPO(sites) * 0.0 #nothing
 
     bra, ket = precompute_qtt_states(sites)
     
@@ -46,6 +47,7 @@ function System(params::ModelParameters)
         ket
     )
 end
+
 function Base.show(io::IO, sys::System)
     println(io, "System (L=$(sys.params.L))")
     println(io, "  ├─ Hopping (t): $(typeof(sys.params.t))")
@@ -56,5 +58,5 @@ function Base.show(io::IO, sys::System)
     println(io, "  └─ ITensors MaxDim: $(sys.params.itensors_maxdim)")
     println(io, "  [Dynamic State]")
     println(io, "  ├─ VH MaxLinkDim: $(maxlinkdim(sys.VH))")
-    println(io, "  └─ ρ MaxLinkDim:  $(maxlinkdim(sys.rho))")
+    println(io, "  └─ ρ MaxLinkDim:  $(maxlinkdim(sys.ρ))")
 end
