@@ -10,6 +10,7 @@ function run_scf!(sys::System, params::SCFParams, H_min::Float64, H_max::Float64
 
 
     converged = false
+    rel_change = Inf
     for iter in 1:params.max_iterations
         if verbose == :all
             println("SCF Iteration $iter")
