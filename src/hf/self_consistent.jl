@@ -25,12 +25,6 @@ function run_scf!(sys::System, params::SCFParams, H_min::Float64, H_max::Float64
         
 
         # Step 3: Mix with previous potential
-        if iter == 1
-            sys.VH = vh_mpo
-        else
-            sys.VH = +(params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        end 
-
         # Step 4: Check convergence        
         if iter > 1
             vh_diff = +(vh_mpo, -sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
@@ -41,6 +35,13 @@ function run_scf!(sys::System, params::SCFParams, H_min::Float64, H_max::Float64
         if verbose == :all
             println("  Relative Change in VH: $(rel_change * 100) %")
         end
+
+        if iter == 1
+            sys.VH = vh_mpo
+        else
+            sys.VH = +(params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        end 
+
         if iter > 1 && rel_change < params.scf_tol
             converged = true
             if verbose == :all
