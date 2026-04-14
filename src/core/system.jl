@@ -63,5 +63,6 @@ function Base.show(io::IO, sys::System)
     println(io, "  └─ ITensors MaxDim: $(sys.params.itensors_maxdim)")
     println(io, "  [Dynamic State]")
     println(io, "  ├─ VH MaxLinkDim: $(maxlinkdim(sys.VH))")
+    println(io, "  ├─ VF MaxLinkDim: $(maxlinkdim(sys.VF))")
     println(io, "  └─ ρ MaxLinkDim:  $(maxlinkdim(sys.ρ))")
 end
