@@ -11,6 +11,9 @@ struct ModelParameters{Tt, Tu, Tw, Ts}
     itensors_maxdim::Int
     density::Float64
     purification_steps::Int
+    scf_mixing::Float64
+    scf_tol::Float64
+    scf_max_iterations::Int
 end
 
 mutable struct System{P}
