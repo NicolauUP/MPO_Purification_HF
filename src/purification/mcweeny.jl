@@ -9,12 +9,12 @@ function construct_rho_0(sys::System, params::ModelParameters ,H_max::Float64, H
     N = 2^length(sys.sites)
     Ne = round(Int, N * params.density)
     Id = Identity_MPO(sys.sites)   # built internally!
-    μ = real(tr(sys.H0) / N) #Technically it should then sum the mean field Hamiltonian. 
     #= 
     TODO:
-        - Add the mean field structure !
+    - Add the mean field structure !
     =#
     H = +(sys.H0, sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    μ = real(tr(H) / N) #Technically it should then sum the mean field Hamiltonian. 
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
     coeff_I = (Ne + λ * μ) / N
     coeff_H = -(λ / N)
@@ -70,6 +70,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         # Convergence check
         if idem_error < 0.1/100 && mpo_rel_change < 0.1/100
             if verbose > 0 println("\nConverged!\n") end
+            print("Final Trace (Ne): $T1, Idempotency Error: $(idem_error * 100) %\n")
             return ρ0
         end
 

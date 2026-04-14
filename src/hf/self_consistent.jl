@@ -18,8 +18,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
         end
         # Step 1: Obtain density matrix!
         ρ0 = construct_rho_0(sys, params, H_min, H_max)
-        ρ_purified = perform_purification(ρ0, params; verbose=verbose == :all ? 1 : 0)
-        sys.ρ = ρ_purified
+
+        ρ_purified = perform_purification(ρ0, params; verbose=0)
+        sys.ρ = ρ_purified #Ok updates rho!
         # Step 2: Extract Hartree potential
         vh_mpo = extract_hartree_mpo_1d(sys)
         
@@ -42,7 +43,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
             sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
         end 
 
-        if iter > 1 && rel_change < params.scf_tol
+        if iter > 1 && rel_change * 100 < params.scf_tol
             converged = true
             if verbose == :all
                 println("\nSCF Converged in $iter iterations with relative change $(rel_change * 100) %\n")
@@ -52,7 +53,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
         end
     end
     if !converged && verbose != :nothing
-        println("\nSCF did not converge within $(params.max_iterations) iterations. Final relative change: $(rel_change * 100) %\n")
+        println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final relative change: $(rel_change * 100) %\n")
     end
     return converged    
 
