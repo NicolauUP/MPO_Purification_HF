@@ -47,6 +47,7 @@ function run_scf!(sys::System, params::SCFParams, H_min::Float64, H_max::Float64
             if verbose == :all
                 println("\nSCF Converged in $iter iterations with relative change $(rel_change * 100) %\n")
             end
+            sys.VH = vh_mpo # Final update to ensure we return the most accurate VH
             break
         end
     end
