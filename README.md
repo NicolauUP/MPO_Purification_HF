@@ -71,8 +71,9 @@ HartreeFockMPO/
         │                           # MatrixChecker: evaluates ⟨i|MPO|j⟩
         │                           # precompute_qtt_states: speeds up MatrixChecker
         └── observables.jl          # Physical observables
-                                    # [TO BE IMPLEMENTED]
 
+                                    # [TO BE IMPLEMENTED]
+```
 ## Data Flow
 
 ```text
@@ -93,8 +94,9 @@ ModelParameters{Tt, Tu, Tw, Ts}
   ├──► new_VH = build_hartree(sys)             # TCI probes new ρ, builds next Hartree MPO
   │
   └──► sys.VH = α * new_VH + (1 - α) * sys.VH  # Mix potentials to stabilize CDW / loop
+```
 
-  ## Key Structs
+## Key Structs
 
 ```julia
 ModelParameters{Tt, Tu, Tw, Ts}
@@ -117,3 +119,4 @@ mutable struct System{P}
   rho        :: MPO                  # Dynamic: Density Matrix
   bra_states :: Any                  # Precomputed bases for MatrixChecker
   ket_states :: Any                  # Precomputed bases for MatrixChecker
+```
