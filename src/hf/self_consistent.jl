@@ -1,11 +1,11 @@
 
 
-function run_scf!(sys::System, params::SCFParams, H_min::Float64, H_max::Float64; verbose::Int=:nothing) 
+function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:nothing) 
     if verbose == :all
         println("Starting SCF iterations with parameters:")
-        println("  Max Iterations: $(params.max_iterations)")
-        println("  Convergence Tolerance: $(params.scf_tol)")
-        println("  Mixing Parameter: $(params.scf_mixing)")
+        println("  Max Iterations: $(sys.params.max_iterations)")
+        println("  Convergence Tolerance: $(sys.params.scf_tol)")
+        println("  Mixing Parameter: $(sys.params.scf_mixing)")
     end
 
 
@@ -39,7 +39,7 @@ function run_scf!(sys::System, params::SCFParams, H_min::Float64, H_max::Float64
         if iter == 1
             sys.VH = vh_mpo
         else
-            sys.VH = +(params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+            sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
         end 
 
         if iter > 1 && rel_change < params.scf_tol
