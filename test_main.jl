@@ -60,12 +60,9 @@ end
 println("\n--- Test 3: Purification Check ---")
 ρ_purified = perform_purification(ρ0, params; verbose=1)
 
-for i in 1:2^L
-    val = MatrixChecker(ρ_purified, sys.sites, i - 1, i - 1)
-    println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " i - 1 i - 1 val)
-end
+bra_cache, ket_cache = precompute_qtt_states(sys.sites)
 
 for i in 1:2^L
-    val = MatrixChecker(ρ_purified, sys.sites, 0, i - 1)
-    println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " 0 i - 1 val)
+    val = MatrixChecker(ρ_purified, sys.sites, i - 1, i - 1,bra_cache, ket_cache) # Check diagonal elements (expecting values close to 0 or 1)
+    println(@sprintf "<%.0f|ρ|%.0f> = %8.3f   " i - 1 i - 1 val)
 end
