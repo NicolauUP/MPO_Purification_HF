@@ -12,11 +12,12 @@ struct ModelParameters{Tt, Tu, Tw}
     purification_steps::Int
 end
 
-struct System{P}
+mutable struct System{P}
     params::P
     sites::Vector{Index{Int64}}
     H0::MPO # This is just H0 + W
 end
+
 
 function System(params::ModelParameters)
     sites = ITensors.siteinds("Qubit", params.L)
