@@ -7,10 +7,10 @@ import TensorCrossInterpolation as TCI
 using LinearAlgebra
 using Printf
 
-include("src/core/operators.jl")
-include("src/core/system.jl")
-include("src/hamiltonians/mpo_construction.jl")
-include("src/utils/quantics.jl")
+include("../src/core/operators.jl")
+include("../src/core/system.jl")
+include("../src/hamiltonians/mpo_construction.jl")
+include("../src/utils/quantics.jl")
 include("src/purification/mcweeny.jl")
 # include("src/tci/modulations.jl")
 
@@ -25,12 +25,17 @@ L = 6
 t = -1.0
 U = 0.0
 W(x) = 0.5 * cos(π * x)
+S = nothing
 tci_tol = 1e-6
 itensors_tol = 1e-10
 itensors_maxdim = 100
 density = 0.5
 purification_steps = 40
-params = ModelParameters(L, t, U, W, tci_tol, itensors_tol, itensors_maxdim, density, purification_steps)
+scf_mixing = 0.5
+scf_tol = 0.1 #%
+scf_max_iterations = 100
+
+params = ModelParameters(L, t, U, W,S, tci_tol, itensors_tol, itensors_maxdim, density, purification_steps, scf_mixing, scf_tol, scf_max_iterations)
 sys = System(params)
 println("System constructed successfully:")
 println()

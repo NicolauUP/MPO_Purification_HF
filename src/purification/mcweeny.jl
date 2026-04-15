@@ -5,7 +5,7 @@
 Build the initial density matrix guess by linearly mapping the
 eigenvalues of H into [0,1] with the correct electron count Ne.
 """
-function construct_rho_0(sys::System, params::ModelParameters ,H_max::Float64, H_min::Float64)
+function construct_rho_0(sys::System, params::ModelParameters ,H_min::Float64, H_max::Float64)
     N = 2^length(sys.sites)
     Ne = round(Int, N * params.density)
     Id = Identity_MPO(sys.sites)   # built internally!
@@ -16,6 +16,7 @@ function construct_rho_0(sys::System, params::ModelParameters ,H_max::Float64, H
     H = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
     μ = real(tr(H) / N) #Technically it should then sum the mean field Hamiltonian. 
+    println("Constructing initial ρ0 with μ = $μ, H_min = $H_min, H_max = $H_max, Ne = $Ne")
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
     coeff_I = (Ne + λ * μ) / N
     coeff_H = -(λ / N)
@@ -79,7 +80,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         if mpo_rel_change < 1e-8 && idem_error > 0.1/100 # Idempotency error larger than 0.1% but MPO is no longer changing!
             @warn "Purification stuck: MPO is no longer changing (mpo_rel_change < 1e-8) " *
                   "but idempotency error is still large (idem_error = $(idem_error*100) %). " *
-                  "Consider increasing maxχ (current: $maxχ)."
+                  "Consider increasing maxχ (current: $params.itensors_maxdim)."
             break
         end
 

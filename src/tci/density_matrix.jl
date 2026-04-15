@@ -13,7 +13,7 @@ function (he::HartreeEvaluate1D)(i_float::Real)
     neighbors = [i-1, i+1]
 
     for j in neighbors
-        if i <= j <= 2^L
+        if 1 <= j <= 2^L
             n_j = MatrixChecker(he.sys.ρ, 
                                 he.sys.sites,
                                  j,
@@ -64,7 +64,7 @@ function (fe::FockEvaluator1D)(i_float::Real)
     
     # Measure the bond order <c†_{x+1} c_x>
     # We use your MatrixChecker logic
-    ρ_val = MatrixChecker(fe.sys.ρ, fe.sys.sites, x+1, x, fe.sys.bra_states, fe.sys.ket_states)
+    ρ_val = MatrixChecker(fe.sys.ρ, fe.sys.sites, x, x+1, fe.sys.bra_states, fe.sys.ket_states)
     
     # The Fock coefficient is -U * bond_order
     return - fe.sys.params.U * real(ρ_val)

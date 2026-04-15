@@ -7,7 +7,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
         println("  Convergence Tolerance: $(sys.params.scf_tol)")
         println("  Mixing Parameter: $(sys.params.scf_mixing)")
     end
-
+    params = sys.params
 
     converged = false
     rel_change = Inf
