@@ -3,3 +3,4 @@ data/
 *.csv
 *.hdf5
 *.png
+notebooks/
