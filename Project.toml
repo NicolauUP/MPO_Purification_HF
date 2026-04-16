@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["NicolauUP <up201805451@up.pt>"]
 
 [deps]
+CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
 ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
@@ -14,6 +15,7 @@ TCIITensorConversion = "9f0aa9f4-9415-4e6a-8795-331ebf40aa04"
 TensorCrossInterpolation = "b261b2ec-6378-4871-b32e-9173bb050604"
 
 [compat]
+CUDA = "5.11.0"
 ITensorMPS = "0.3.45"
 ITensors = "0.9.25"
 LinearAlgebra = "1.11.0"
