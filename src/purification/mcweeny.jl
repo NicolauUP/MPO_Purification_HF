@@ -73,9 +73,9 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         end
 
         # Convergence check
-        if idem_error < 0.1/100 && mpo_rel_change < 0.1/100
-            if verbose > 0 println("\nConverged!\n") end
-            print("Final Trace (Ne): $T1, Idempotency Error: $(idem_error * 100) %\n")
+        if abs(idem_error) < 0.1/100
+            if verbose > 0 println("\n Purification Converged on Idempotency!\n") end
+            print("Final Trace (Ne): $T1, Idempotency Error: $(idem_error * 100) % and MPO Relative Change: $(mpo_rel_change * 100) % \n")
             return ρ0
         end
 
