@@ -17,6 +17,11 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     sys.VH = to_gpu(sys.VH)
     sys.VF = to_gpu(sys.VF) #
 
+     # --- ADD THIS ACID TEST ---
+    println("Checking GPU Transfer...")
+    println("H0 type: ", typeof(sys.H0[1])) # Look at the first tensor
+    # --------------------------
+
     #=
     Should i pass three different mpos to the gpu then add? maybe clean them up afterwards? TODO
     =#
