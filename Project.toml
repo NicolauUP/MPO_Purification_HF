@@ -1,7 +1,7 @@
 name = "MPO_MeanField"
 uuid = "5ef1587e-7cf5-4a86-8532-77b9aebd82b1"
-authors = ["NicolauUP <up201805451@up.pt>"]
 version = "0.1.0"
+authors = ["NicolauUP <up201805451@up.pt>"]
 
 [deps]
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
@@ -9,6 +9,7 @@ ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Quantics = "87f76fb3-a40a-40c9-a63c-29fcfe7b7547"
 QuanticsTCI = "b11687fd-3a1c-4c41-97d0-998ab401d50e"
+Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 TCIITensorConversion = "9f0aa9f4-9415-4e6a-8795-331ebf40aa04"
 TensorCrossInterpolation = "b261b2ec-6378-4871-b32e-9173bb050604"
 
@@ -18,5 +19,6 @@ ITensors = "0.9.25"
 LinearAlgebra = "1.11.0"
 Quantics = "0.4.8"
 QuanticsTCI = "0.7.3"
+Revise = "3.14.2"
 TCIITensorConversion = "0.2.1"
 TensorCrossInterpolation = "0.9.19"

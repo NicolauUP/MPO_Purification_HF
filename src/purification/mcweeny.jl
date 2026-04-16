@@ -5,10 +5,13 @@
 Build the initial density matrix guess by linearly mapping the
 eigenvalues of H into [0,1] with the correct electron count Ne.
 """
-function construct_rho_0(sys::System, params::ModelParameters ,H_min::Float64, H_max::Float64)
+function construct_rho_0(sys::System, params::ModelParameters ,H_min::Float64, H_max::Float64;
+    to_gpu=identity)
+    
     N = 2^length(sys.sites)
     Ne = round(Int, N * params.density)
-    Id = Identity_MPO(sys.sites)   # built internally!
+    Id_cpu = Identity_MPO(sys.sites)   # built internally!
+    Id = to_gpu(Id_cpu) 
     #= 
     TODO:
     - Add the mean field structure !
@@ -105,6 +108,10 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         end
 
         if !use_mcweeny && (i > 5 && abs(cn - 0.5) < 0.2)
+            #=
+            TODO: The threshold for switching to McWeeny can be tuned. Here we check if cn is close to 0.5 after a few iterations, which indicates we're in the regime where McWeeny is more effective.
+            Maybe, 0.2 is too large, but it ensures we don't switch too early. We can also add a check on the idempotency error to ensure we're in the right regime.
+             =# 
             use_mcweeny = true
             if verbose > 0 println("  Switching to McWeeny purification\n") end
         end

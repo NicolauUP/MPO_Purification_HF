@@ -1,12 +1,25 @@
 
 
-function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:nothing) 
+function run_scf!(sys::System, H_min::Float64, H_max::Float64; 
+    verbose::Symbol=:nothing,
+    to_gpu=identity,
+    to_cpu=identity,
+    cleanup= () -> nothing)
+
     if verbose == :all
         println("Starting SCF iterations with parameters:")
         println("  Max Iterations: $(sys.params.scf_max_iterations)")
         println("  Convergence Tolerance: $(sys.params.scf_tol)")
         println("  Mixing Parameter: $(sys.params.scf_mixing)")
     end
+
+    sys.H0 = to_gpu(sys.H0)
+    sys.VH = to_gpu(sys.VH)
+    sys.VF = to_gpu(sys.VF) #
+
+    #=
+    Should i pass three different mpos to the gpu then add? maybe clean them up afterwards? TODO
+    =#
     params = sys.params
 
     converged = false
@@ -17,16 +30,29 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
 
         end
         # Step 1: Obtain density matrix!
-        ρ0 = construct_rho_0(sys, params, H_min, H_max)
+        ρ0_device = construct_rho_0(sys, params, H_min, H_max; to_gpu=to_gpu)
 
-        ρ_purified = perform_purification(ρ0, params; verbose=0)
-        sys.ρ = ρ_purified #Ok updates rho!
+        ρ_purified_device = perform_purification(ρ0_device, params; verbose=0)
+        sys.ρ = to_cpu(ρ_purified_device) #Ok updates rho!
+        #=
+        Verify how this to_cpu should be done! 
+        There are two options:
+        1. Move the purified density matrix back to CPU and then extract the Hartree potential
+        2. Extract the Hartree potential directly on the GPU and only move the resulting MPO back to CPU. 
+
+        Verify which one is more efficient. I believe 1 is ok, because TCI is scalar! 
+        TODO: Write to_cpu funcion! 
+        =#
+
         # Step 2: Extract Hartree potential
-        vh_mpo = extract_hartree_mpo_1d(sys)
-        vf_mpo = extract_fock_mpo_1d(sys) 
+        vh_mpo_cpu = extract_hartree_mpo_1d(sys)
+        vf_mpo_cpu = extract_fock_mpo_1d(sys) 
+
+        vh_mpo = to_gpu(vh_mpo_cpu)
+        vf_mpo = to_gpu(vf_mpo_cpu)
 
 
-        # Step 3: Mix with previous potential
+
         # Step 4: Check convergence        
         if iter > 1
             vh_diff = +(vh_mpo, -sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
@@ -55,6 +81,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64; verbose::Symbol=:
             sys.VF = vf_mpo # Final update to ensure we return the most accurate VF
             break
         end
+        # Optional cleanup to free GPU memory after each iteration
+        cleanup() # Default to a no-op, but can be set to a function that frees GPU memory if needed!
+        GC.gc(true) # Force garbage collection to free memory
     end
     if !converged && verbose != :nothing
         println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final relative change: $(rel_change * 100) %\n")
