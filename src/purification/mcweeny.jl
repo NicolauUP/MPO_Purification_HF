@@ -51,7 +51,8 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         end
 
         P2 = apply(ρ0, ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        truncate!(P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        #truncate!(P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        #= Verify if truncation here is necessary or if we can just rely on the truncation in the apply step.=#
 
         T1 = real(tr(ρ0))
         T2 = real(tr(P2))
@@ -80,7 +81,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         end
 
         # Safe break — MPO stuck but not idempotent
-        if mpo_rel_change < 1e-8 && idem_error > 0.1/100 # Idempotency error larger than 0.1% but MPO is no longer changing!
+        if mpo_rel_change < 1e-8 && abs(idem_error) > 0.1/100 # Idempotency error larger than 0.1% but MPO is no longer changing!
             @warn "Purification stuck: MPO is no longer changing (mpo_rel_change < 1e-8) " *
                   "but idempotency error is still large (idem_error = $(idem_error*100) %). " *
                   "Consider increasing maxχ (current: $params.itensors_maxdim)."
@@ -91,7 +92,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         T2_old = T2
 
         P3 = apply(ρ0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        truncate!(P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        #truncate!(P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         if verbose > 0
             println(" χ_1: ", maxlinkdim(ρ0),
