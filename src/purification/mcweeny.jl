@@ -23,7 +23,12 @@ function construct_rho_0(sys::System, params::ModelParameters ,H_min::Float64, H
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
     coeff_I = (Ne + λ * μ) / N
     coeff_H = -(λ / N)
-    return +(coeff_I * Id, coeff_H * H; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    
+    ρ_temp = +(coeff_I * Id, coeff_H * H; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    T1 = real(tr(ρ_temp))
+    println("Initial trace (Ne) of ρ0: $T1")   
+    println
+    return ρ_temp
 end
 
 
