@@ -11,33 +11,40 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         println("  Max Iterations: $(sys.params.scf_max_iterations)")
         println("  Convergence Tolerance: $(sys.params.scf_tol)")
         println("  Mixing Parameter: $(sys.params.scf_mixing)")
+    elseif verbose == :Density
+        println("Starting SCF iterations with parameters:")
+        println("  Max Iterations: $(sys.params.scf_max_iterations)")
+        println("  Convergence Tolerance: $(sys.params.scf_tol)")
+        println("  Mixing Parameter: $(sys.params.scf_mixing)")
     end
 
     sys.H0 = to_gpu(sys.H0)
     sys.VH = to_gpu(sys.VH)
     sys.VF = to_gpu(sys.VF) #
 
-     # --- ADD THIS ACID TEST ---
-    println("Checking GPU Transfer...")
-    println("H0 type: ", typeof(sys.H0[1])) # Look at the first tensor
-    # --------------------------
-
-    #=
-    Should i pass three different mpos to the gpu then add? maybe clean them up afterwards? TODO
-    =#
+   
     params = sys.params
 
     converged = false
     rel_change = Inf
     for iter in 1:params.scf_max_iterations
-        if verbose == :all
-            println("SCF Iteration $iter")
+        if verbose != :nothing
+            println("\n ----------- SCF Iteration $iter")
 
         end
         # Step 1: Obtain density matrix!
         ρ0_device = construct_rho_0(sys, params, H_min, H_max; to_gpu=to_gpu)
+        if verbose == :Density
+            T1 = real(tr(ρ0_device))
+            println("  Trace (Ne) of initial ρ0: $T1")
+        end
 
-        ρ_purified_device = perform_purification(ρ0_device, params; verbose=0)
+        ρ_purified_device = perform_purification(ρ0_device, params; verbose=1)
+
+        if verbose == :Density
+            T1_purified = real(tr(ρ_purified_device))
+            println("  Trace (Ne) of purified ρ: $T1_purified")
+        end
         sys.ρ = to_cpu(ρ_purified_device) #Ok updates rho!
         #=
         Verify how this to_cpu should be done! 

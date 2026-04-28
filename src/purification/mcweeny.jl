@@ -12,22 +12,21 @@ function construct_rho_0(sys::System, params::ModelParameters ,H_min::Float64, H
     Ne = round(Int, N * params.density)
     Id_cpu = Identity_MPO(sys.sites)   # built internally!
     Id = to_gpu(Id_cpu) 
-    #= 
-    TODO:
-    - Add the mean field structure !
-    =#
+
     H = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
     μ = real(tr(H) / N) #Technically it should then sum the mean field Hamiltonian. 
-    println("Constructing initial ρ0 with μ = $μ, H_min = $H_min, H_max = $H_max, Ne = $Ne")
+    @assert H_max > μ > H_min "μ=$μ outside [H_min=$H_min, H_max=$H_max]" 
+
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
     coeff_I = (Ne + λ * μ) / N
     coeff_H = -(λ / N)
     
     ρ_temp = +(coeff_I * Id, coeff_H * H; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-    T1 = real(tr(ρ_temp))
-    println("Initial trace (Ne) of ρ0: $T1")   
-    println
+
+
+    Id = nothing
+    Id_cpu = nothing 
     return ρ_temp
 end
 
@@ -42,8 +41,11 @@ Returns the purified density matrix ρ, or a partially purified ρ with a
 warning if convergence fails.
 """
 function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
-    
-    
+
+    N = 2^length(sys.sites)
+    Ne = round(Int, N * params.density)
+ 
+    cn = nothing
     use_mcweeny = false
     ρ_old = nothing
     T2_old = 0.0
@@ -61,8 +63,12 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
 
         T1 = real(tr(ρ0))
         T2 = real(tr(P2))
-        denom = T1 - T2
-        idem_error = denom / T1
+        denom = T1 - T2 
+        #=
+        Denome is the current error in the idempotency! Sum of the lambda_i - lambda_i^2. I want to ensure 0.1% in each eigenvalues, so my error should be denom = 0.1/100 / T1 
+        =#
+        
+        idem_error = denom / T1 
 
         if ρ_old !== nothing
             cross_term = real(inner(ρ_old, ρ0))
@@ -80,8 +86,10 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
 
         # Convergence check
         if abs(idem_error) < 0.1/100
-            if verbose > 0 println("\n Purification Converged on Idempotency!\n") end
-            print("Final Trace (Ne): $T1, Idempotency Error: $(idem_error * 100) % and MPO Relative Change: $(mpo_rel_change * 100) % \n")
+            if verbose > 0 
+                println("\n Purification Converged on Idempotency!\n")
+             end
+
             return ρ0
         end
 
@@ -107,19 +115,18 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
 
         T3 = real(tr(P3))
 
-        if abs(denom) > 1e-8
-            cn = (T2 - T3) / denom
-        else
-            use_mcweeny = true
-        end
 
-        if !use_mcweeny && (i > 5 && abs(cn - 0.5) < 0.2)
-            #=
-            TODO: The threshold for switching to McWeeny can be tuned. Here we check if cn is close to 0.5 after a few iterations, which indicates we're in the regime where McWeeny is more effective.
-            Maybe, 0.2 is too large, but it ensures we don't switch too early. We can also add a check on the idempotency error to ensure we're in the right regime.
-             =# 
-            use_mcweeny = true
-            if verbose > 0 println("  Switching to McWeeny purification\n") end
+       if abs(T1 - Ne) > 0.1/100
+            @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
+            return ρ0
+
+        elseif abs(idem_error) < 0.1/100
+            return ρ0  # already converged, caught earlier
+        else
+            cn = (T2 - T3) / denom  # normal PM step
+            if abs(cn - 0.5) < 0.02
+                use_mcweeny = true  # near unstable fixed point, hand off to McWeeny
+            end
         end
 
         if use_mcweeny
@@ -139,7 +146,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
             end
         end
 
-        truncate!(ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+
     end
 
     @warn "Purification did not converge after $(params.purification_steps) steps. " *
@@ -147,3 +154,11 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
           "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
     return ρ0
 end
+
+
+#= 
+TODO:
+    1) Maybe I can test that version that only needs rho and rho^2 instead of rho^3? It requires more iterations but maybe it is more stable?
+
+    
+=#
