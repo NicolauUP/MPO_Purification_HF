@@ -31,6 +31,8 @@ function _build_translation_chain(sites)
     return T_R_MPO, T_L_MPO
 end
 
+
+
 function build_W(sites, params)
     if !isnothing(params.W)
         _, W_MPO, _ = Quantics_TCI(params.W, Float64, sites, params.tci_tol)

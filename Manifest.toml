@@ -1022,7 +1022,7 @@ uuid = "6f1432cf-f94c-5a45-995e-cdbf5db27b0b"
 version = "3.5.1"
 
 [[deps.MPO_MeanField]]
-deps = ["CUDA", "ITensorMPS", "ITensors", "LinearAlgebra", "Quantics", "QuanticsTCI", "Revise", "TCIITensorConversion", "TensorCrossInterpolation"]
+deps = ["CUDA", "ITensorMPS", "ITensors", "LinearAlgebra", "Plots", "Quantics", "QuanticsTCI", "Revise", "TCIITensorConversion", "TensorCrossInterpolation"]
 path = "."
 uuid = "5ef1587e-7cf5-4a86-8532-77b9aebd82b1"
 version = "0.1.0"

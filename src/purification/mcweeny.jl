@@ -42,7 +42,8 @@ warning if convergence fails.
 """
 function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
 
-    N = 2^length(sys.sites)
+    N = 2^params.L
+    println("N = $N, density = $(params.density), Ne = $(round(Int, N * params.density))")
     Ne = round(Int, N * params.density)
  
     cn = nothing
@@ -116,7 +117,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         T3 = real(tr(P3))
 
 
-       if abs(T1 - Ne) > 0.1/100
+       if abs(T1 - Ne) / Ne > 0.1/100
             @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
             return ρ0
 
@@ -147,6 +148,7 @@ function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
         end
 
 
+
     end
 
     @warn "Purification did not converge after $(params.purification_steps) steps. " *
@@ -158,7 +160,5 @@ end
 
 #= 
 TODO:
-    1) Maybe I can test that version that only needs rho and rho^2 instead of rho^3? It requires more iterations but maybe it is more stable?
-
-    
+    1) Maybe I can test that version that only needs rho and rho^2 instead of rho^3? It requires more iterations but maybe it is more stable?   
 =#
