@@ -75,7 +75,7 @@ function build_translation_square(sites)
 
     
 
-
+    return T_R_MPO, T_L_MPO, T_U_MPO, T_D_MPO
 
 end
 
@@ -144,15 +144,16 @@ function build_H0(sites, params::ParametersSquare)
 
     elseif tx isa Function && ty isa Function
 
-        _, TxMPO, _ = Quantics_TCI(tx, Float64, sites, params.tci_tol)
-        _, TyMPO, _ = Quantics_TCI(ty, Float64, sites, params.tci_tol)
+        _, Tx_MPO, _ = Quantics_TCI(tx, Float64, sites, params.tci_tol)
+        _, Ty_MPO, _ = Quantics_TCI(ty, Float64, sites, params.tci_tol)
 
         H_T_R = apply(Tx_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_U = apply(Ty_MPO, T_U; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_D = apply(T_D, ITensors.dag(Ty_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
-        H0 = +(H_T_R, H_T_L, H_T_U, H_T_D; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+      H0 = +(H_T_R, H_T_L, H_T_U, H_T_D; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+
     end
         
 
