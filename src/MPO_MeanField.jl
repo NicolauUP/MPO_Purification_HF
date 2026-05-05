@@ -2,7 +2,6 @@ module MPO_MeanField
 
 using ITensors, ITensorMPS
 using Quantics, QuanticsTCI
-using TCIITensorConversion
 import TensorCrossInterpolation as TCI
 using LinearAlgebra
 using Printf
@@ -16,5 +15,5 @@ include("../src/tci/modulations.jl")
 include("../src/tci/density_matrix.jl")
 include("../src/hf/self_consistent.jl")
 
-export ModelParameters, System, extract_hartree_mpo_1d, extract_fock_mpo_1d, run_scf!, MatrixChecker, construct_rho_0, perform_purification
+export Parameters1D, ParametersSquare, System, extract_hartree_mpo_1d, extract_fock_mpo_1d, run_scf!, MatrixChecker, construct_rho_0, perform_purification, build_translation_square
 end # module MPO_MeanField

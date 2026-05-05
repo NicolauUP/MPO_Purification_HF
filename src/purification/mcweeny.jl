@@ -5,7 +5,7 @@
 Build the initial density matrix guess by linearly mapping the
 eigenvalues of H into [0,1] with the correct electron count Ne.
 """
-function construct_rho_0(sys::System, params::ModelParameters ,H_min::Float64, H_max::Float64;
+function construct_rho_0(sys::System, params::AbstractModelParameters ,H_min::Float64, H_max::Float64;
     to_gpu=identity)
     
     N = 2^length(sys.sites)
@@ -40,7 +40,7 @@ and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
 Returns the purified density matrix ρ, or a partially purified ρ with a
 warning if convergence fails.
 """
-function perform_purification(ρ0::MPO, params::ModelParameters;verbose::Int=1)
+function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose::Int=1)
 
     N = 2^params.L
     println("N = $N, density = $(params.density), Ne = $(round(Int, N * params.density))")

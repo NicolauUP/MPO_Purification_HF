@@ -66,3 +66,14 @@ function Quantics_TCI(f::Function, eltype::Type{<:Number}, sites::Vector{<:Index
     end
     return QTT, mpo, mps
 end
+
+function square_lattice_decoder(i::Integer, L::Integer)
+    x = zero(i)
+    y = zero(i)
+    for k in 0:(div(L,2)-1)
+        x |= ((i >> (2k)) & 1) << k
+        y |= ((i >> (2k + 1)) & 1) << k
+    end
+    return x,y
+end
+

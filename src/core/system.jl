@@ -1,6 +1,23 @@
+abstract type AbstractModelParameters end #This is amazing?!
 
 
-struct ModelParameters{Tt, Tu, Tw, Ts}
+Base.@kwdef struct Parameters1D{Tt, Tu, Tw, Ts} <: AbstractModelParameters
+    L::Int
+    t::Tt #Type of the hopping, maybe either a number or a function to be used with TCI
+    U::Tu #Type of the interaction
+    W::Tw #Type of the potential.
+    S::Ts #Type of the seed for TCI
+    tci_tol::Float64
+    itensors_tol::Float64
+    itensors_maxdim::Int
+    density::Float64
+    purification_steps::Int
+    scf_mixing::Float64
+    scf_tol::Float64
+    scf_max_iterations::Int
+end
+    
+Base.@kwdef struct ParametersSquare{Tt<:Tuple, Tu, Tw, Ts} <: AbstractModelParameters
     L::Int
     t::Tt #Type of the hopping, maybe either a number or a function to be used with TCI
     U::Tu #Type of the interaction
@@ -16,6 +33,7 @@ struct ModelParameters{Tt, Tu, Tw, Ts}
     scf_max_iterations::Int
 end
 
+
 mutable struct System{P}
     params::P
     sites::Vector{Index{Int64}}
@@ -29,16 +47,14 @@ mutable struct System{P}
 end
 
 
-function System(params::ModelParameters)
+function System(params::AbstractModelParameters)
     sites = ITensors.siteinds("Qubit", params.L)
     
 
-    H_static = build_H0(sites, params)
-
+    H_static = build_H0(sites, params) #This should route to the correct function based on the type of params!
     VH_init = build_seed(sites, params)
     VF_init = Identity_MPO(sites) * 0.0 # We start with no Fock potential, but we could also build a seed for it.
     rho_init = Identity_MPO(sites) * 0.0 #nothing
-
     bra, ket = precompute_qtt_states(sites)
     
     return System{typeof(params)}(
