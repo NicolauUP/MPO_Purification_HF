@@ -1,4 +1,4 @@
-
+using CUDA
 """
     construct_rho_0(sys, H, ϵ, maxχ, H_max, H_min, Ne)
 
@@ -85,15 +85,7 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
             println("  Rel Change in MPO (%)   : $(mpo_rel_change * 100)")
         end
 
-        # Convergence check
-        if abs(idem_error) < 0.1/100
-            if verbose > 0 
-                println("\n Purification Converged on Idempotency!\n")
-             end
-
-            return ρ0
-        end
-
+      
         # Safe break — MPO stuck but not idempotent
         if mpo_rel_change < 1e-8 && abs(idem_error) > 0.1/100 # Idempotency error larger than 0.1% but MPO is no longer changing!
             @warn "Purification stuck: MPO is no longer changing (mpo_rel_change < 1e-8) " *
@@ -109,9 +101,9 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
         #truncate!(P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         if verbose > 0
-            println(" χ_1: ", maxlinkdim(ρ0),
-                    " χ_2: ", maxlinkdim(P2),
-                    " χ_3: ", maxlinkdim(P3))
+            println(" χ_1: ", linkdims(ρ0),"\n",
+                    " χ_2: ", linkdims(P2),"\n",
+                    " χ_3: ", linkdims(P3))
         end
 
         T3 = real(tr(P3))
@@ -121,8 +113,10 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
             @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
             return ρ0
 
-        elseif abs(idem_error) < 0.1/100
-            return ρ0  # already converged, caught earlier
+        elseif abs(idem_error) < 0.1/100 && mpo_rel_change < 0.1/100 
+            @info "Purification converged: idempotency error and MPO change both below 0.1%. Returning result."
+            return ρ0  # already converged, caught earlier 
+            #= Convergence defined by simulatenous small idempotency error and small change in MPO. This is to catch cases where we are near the fixed point but not exactly at it, and the MPO is no longer changing. =#
         else
             cn = (T2 - T3) / denom  # normal PM step
             if abs(cn - 0.5) < 0.02
@@ -148,7 +142,14 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
         end
 
 
-
+ # --- Memory Management ---
+        P2 = nothing
+        P3 = nothing
+        
+        # Force garbage collection
+        GC.gc()
+        
+        CUDA.reclaim()  # Reclaim GPU memory if using CUDA
     end
 
     @warn "Purification did not converge after $(params.purification_steps) steps. " *

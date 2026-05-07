@@ -67,8 +67,8 @@ function Quantics_TCI(f::Function, eltype::Type{<:Number}, sites::Vector{<:Index
     return QTT, mpo, mps
 end
 
-function square_lattice_decoder(i::Integer, L::Integer)
-    idx = i 
+function square_lattice_decoder(i::Number, L::Integer)
+    idx = Int(i)
     
     x = zero(idx)
     y = zero(idx)
@@ -79,6 +79,5 @@ function square_lattice_decoder(i::Integer, L::Integer)
         # Odd bits of idx (1, 3, 5...) control X
         x |= ((idx >> (2k + 1)) & 1) << k
     end
-    
     return x, y
 end
