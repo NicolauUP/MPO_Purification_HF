@@ -1,7 +1,5 @@
 # src/hamiltonian/mpo_construction.jl
 
-
-
 function build_translation_chain(sites)
     L = length(sites)
     T_R_opsum = OpSum()
@@ -134,7 +132,7 @@ function build_H0(sites, params::ParametersSquare)
 
     H0 = nothing
     tx, ty = params.t
-    if tx isa Number && ty isa Number #They will always be the same type!
+    if tx isa Number && ty isa Number 
         println("Using constant hopping tx = $(tx) and ty = $(ty)")
 
         H0 = +(tx * (T_R + T_L), ty * (T_U + T_D); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
@@ -148,7 +146,7 @@ function build_H0(sites, params::ParametersSquare)
         _, Ty_MPO, _ = Quantics_TCI(ty, Float64, sites, params.tci_tol)
 
         H_T_R = apply(Tx_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tola, maxdim=params.itensors_maxdim)
         H_T_U = apply(Ty_MPO, T_U; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_D = apply(T_D, ITensors.dag(Ty_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
@@ -182,8 +180,6 @@ function build_seed(sites, params)
 end
 
 
-# src/hamiltonians/mpo_construction.jl
-
 function build_fock(sys::System)
     sites = sys.sites
     params = sys.params
@@ -194,7 +190,7 @@ function build_fock(sys::System)
     
     # 2. Re-use your hopping MPO logic
     # T_R and T_L are the bare sum_{i} c†_{i+1}c_i and sum_{i} c†_i c_{i+1}
-    T_R, T_L = _build_translation_chain(sites) # Assuming this helper exists
+    T_R, T_L = build_translation_chain(sites) # Assuming this helper exists
     
     # 3. Apply the spatial modulation (The "Fock Hopping")
     # This creates sum_i F(i) * c†_{i+1}c_i

@@ -6,8 +6,8 @@ import TensorCrossInterpolation as TCI
 using LinearAlgebra
 using Printf
 
-include("../src/core/operators.jl")
-include("../src/core/system.jl")
+include("core/operators.jl")
+include("core/system.jl")
 include("../src/hamiltonians/mpo_construction.jl")
 include("../src/utils/quantics.jl")
 include("../src/purification/mcweeny.jl")
