@@ -20,7 +20,7 @@ else
 end
 
 println("="^50)
-println("HartreeFockMPO — Timings")
+println("HartreeFockMPO — Search of the chemical potential in McWeeny purification")
 println("="^50)
 
 τ = (sqrt(10)-2.0)/2.0
@@ -54,10 +54,9 @@ params_warmup = Parameters1D(
 )
 
 sys_warmup = System(params_warmup)
-ρ0_warmup = construct_rho_0(sys_warmup, params_warmup, -3.0, 3.0; to_gpu=to_gpu)
-_ = perform_purification(ρ0_warmup, params_warmup; verbose=0)
+rho = perform_purification_grandcanonical(sys_warmup, params_warmup, -5.0,5.0; verbose=1, to_gpu=to_gpu)
 
-ρ0_warmup = nothing
+rho = nothing
 GC.gc()
 CUDA.functional() && CUDA.reclaim()
 println("Warmup complete. JIT compilation done.\n")
@@ -77,20 +76,12 @@ params = Parameters1D(
 )
 
 sys = System(params)
-println("\n--- Test 1a: Initial ρ₀ Trace ---")
-t_rho0 = @elapsed begin
-ρ0 = construct_rho_0(sys, params, -3.0, 3.0; to_gpu=to_gpu)
-end
 
-# Measure trace on CPU to avoid allocating scalar returns on GPU unnecessarily
-T1 = real(tr(to_cpu(ρ0)))
-Ne = round(Int, 2^L * density)
-@assert isapprox(T1, Ne) "Trace wrong: got $T1, expected $Ne"
-println("Tr(ρ₀) = $T1 ✓  [$(round(t_rho0, digits=2))s]")
 
-println("\n--- Test 2a: Purified ρ Idempotency ---")
+
+
 t_purification = @elapsed begin
-    ρ_purified = perform_purification(ρ0, params; verbose=1)
+    ρ_purified = perform_purification_grandcanonical(sys, params, -5.0, 5.0; verbose=1, to_gpu=to_gpu)
 end
 ρ_purified = to_cpu(ρ_purified)
 println("Purification time: $(round(t_purification, digits=2))s")
@@ -99,5 +90,4 @@ println("Purification time: $(round(t_purification, digits=2))s")
 # Timing Summary
 # ─────────────────────────────────────────
 println("\n--- Timing Summary ---")
-println(@sprintf "  construct_rho_0      : %8.2f s" t_rho0)
 println(@sprintf "  perform_purification : %8.2f s" t_purification)

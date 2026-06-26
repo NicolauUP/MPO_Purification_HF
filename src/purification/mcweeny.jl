@@ -30,6 +30,19 @@ function construct_rho_0(sys::System, params::AbstractModelParameters ,H_min::Fl
     return ρ_temp
 end
 
+function construct_rho_0_mcweeny(sys::System, params::AbstractModelParameters, mu, H_min::Float64, H_max::Float64; to_gpu=identity)
+    N = 2^length(sys.sites)
+    Ne = round(Int, N * params.density)
+    Id_cpu = Identity_MPO(sys.sites)   # built internally!
+    Id = to_gpu(Id_cpu) 
+
+    c = 0.5 / max(mu - H_min, H_max - mu)
+    coeff_I = 0.5 + c * mu
+    coeff_H = -c
+    H = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) #Computes the MF-Hamiltonian
+    rho_0 = +(coeff_I * Id, coeff_H * H; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    return rho_0
+end
 
 """
     perform_purification(ρ0; maxχ, ϵ, max_steps, verbose)
@@ -141,7 +154,86 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
 end
 
 
-#= 
-TODO:
-    1) Maybe I can test that version that only needs rho and rho^2 instead of rho^3? It requires more iterations but maybe it is more stable?   
-=#
+function perform_purification_grandcanonical(sys::System, params::AbstractModelParameters,H_min::Float64,H_max::Float64;verbose::Int=1, to_gpu=identity)
+
+    N = 2^params.L
+    Ne = round(Int, N * params.density)
+
+    if verbose > 0
+        println("N = $N, density = $(params.density), Ne = $Ne")
+    end
+
+    idempotency_tol = 1e-3 # 0.1% idempotency error tolerance
+    #Here, we will implement a bissection search of the chemical potential, to avoid precise trace calculations, which fail with bound dimension limits!
+
+
+    mu_low = H_min
+    mu_high = H_max
+    rho_new = nothing #Outer scope 
+
+    while (mu_high - mu_low) > 1e-4
+        mu = (mu_high + mu_low) / 2.0
+        
+        if verbose > 0
+            println("Current μ: $mu, μ_low: $mu_low, μ_high: $mu_high")
+        end
+
+        rho_0 = construct_rho_0_mcweeny(sys, params, mu, H_min, H_max; to_gpu=to_gpu)
+        
+        abort_flag = false
+
+        for i in 1:params.purification_steps
+            if verbose > 0 
+                println("     --- Step $i ---")
+            end
+            T0 = real(tr(rho_0))        
+            P2 = apply(rho_0, rho_0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+            T2 = real(tr(P2))
+
+            idem_error = abs(T2 - T0) / max(T0,1.0)  # Avoid division by zero
+            if idem_error < idempotency_tol
+
+                if verbose > 0 
+                    println("Converged at step $i. Trace: $T0, Idempotency Error: $idem_error")
+                end
+                return rho_0
+            end
+
+
+
+
+            P3 = apply(rho_0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+            rho_new = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) #Simple Mcweeny Update!
+
+            T1 = real(tr(rho_new))
+
+            #======== Verify if we are above or below the target Ne =#
+            if T1 - Ne > 0.5 #We are above the target, by 0.5 particles
+                mu_high = mu
+                abort_flag = true
+                break
+            elseif T1 - Ne < -0.5 #We are below the target, by 0.5 particles
+                mu_low = mu
+                abort_flag = true
+                break
+            end
+
+            rho_0 = rho_new
+        end
+
+        if !abort_flag
+            @warn "Inner loop maxed out without aborting. Forcing bissection update."
+            if real(tr(rho_new)) > Ne
+                mu_high = mu
+            else
+                mu_low = mu
+            end
+        end
+    end
+    @warn "Bissection resolution limit reached."
+    return rho_new
+end
+
+            
+
+
