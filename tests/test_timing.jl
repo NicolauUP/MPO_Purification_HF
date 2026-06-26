@@ -24,7 +24,7 @@ println("HartreeFockMPO — Timings")
 println("="^50)
 
 τ = (sqrt(10)-2.0)/2.0
-t(x) = -1.0 - 2.0 * cos(2π * τ * (x - 0.5))
+t(x) = -1.0 - 2 * cos(2π * τ * (x - 0.5))
 
 U = 0.3
 W = nothing
@@ -79,7 +79,7 @@ params = Parameters1D(
 sys = System(params)
 println("\n--- Test 1a: Initial ρ₀ Trace ---")
 t_rho0 = @elapsed begin
-ρ0 = construct_rho_0(sys, params, -3.0, 3.0; to_gpu=to_gpu)
+    ρ0 = construct_rho_0(sys, params, -3.0, 3.0; to_gpu=to_gpu)
 end
 
 # Measure trace on CPU to avoid allocating scalar returns on GPU unnecessarily

@@ -24,11 +24,11 @@ println("HartreeFockMPO — Search of the chemical potential in McWeeny purifica
 println("="^50)
 
 τ = (sqrt(10)-2.0)/2.0
-t(x) = -1.0 - 2.0 * cos(2π * τ * (x - 0.5))
+t(x) = -1.0 - 0.0 * cos(2π * τ * (x - 0.5))
 
 U = 0.3
 W = nothing
-S(x) = 0.25 * cos(π * x)
+S(x) = 1.0 * cos(π * x)
  
 tci_tol = 1e-6
 itensors_tol = 1e-10
@@ -84,6 +84,9 @@ t_purification = @elapsed begin
     ρ_purified = perform_purification_grandcanonical(sys, params, -5.0, 5.0; verbose=1, to_gpu=to_gpu)
 end
 ρ_purified = to_cpu(ρ_purified)
+T1 = real(tr(ρ_purified))
+println("Final trace of purified density matrix: $(round(T1, digits=6))")
+@assert T1 ≈ 2^L * density "Purified density matrix trace does not match expected value!"
 println("Purification time: $(round(t_purification, digits=2))s")
 
 # ─────────────────────────────────────────

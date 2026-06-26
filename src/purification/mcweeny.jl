@@ -171,7 +171,7 @@ function perform_purification_grandcanonical(sys::System, params::AbstractModelP
     mu_high = H_max
     rho_new = nothing #Outer scope 
 
-    while (mu_high - mu_low) > 1e-4
+    while (mu_high - mu_low) > 1e-7
         mu = (mu_high + mu_low) / 2.0
         
         if verbose > 0
@@ -187,6 +187,8 @@ function perform_purification_grandcanonical(sys::System, params::AbstractModelP
                 println("     --- Step $i ---")
             end
             T0 = real(tr(rho_0))        
+            println("     Trace (Ne)           : $T0")
+
             P2 = apply(rho_0, rho_0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
             T2 = real(tr(P2))
 
@@ -204,15 +206,15 @@ function perform_purification_grandcanonical(sys::System, params::AbstractModelP
 
             P3 = apply(rho_0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
             rho_new = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) #Simple Mcweeny Update!
-
+            println(" Bond: ", maxlinkdim(rho_new))
             T1 = real(tr(rho_new))
 
             #======== Verify if we are above or below the target Ne =#
-            if T1 - Ne > 0.5 #We are above the target, by 0.5 particles
+            if T1 - Ne > 0.5 && (T1 - T0) > 0  #We are above the target, by 0.5 particles and the trace is increasing!
                 mu_high = mu
                 abort_flag = true
                 break
-            elseif T1 - Ne < -0.5 #We are below the target, by 0.5 particles
+            elseif T1 - Ne < -0.5 && (T1 - T0) < 0  #We are below the target, by 0.5 particles and the trace is decreasing!
                 mu_low = mu
                 abort_flag = true
                 break
