@@ -146,7 +146,7 @@ function build_H0(sites, params::ParametersSquare)
         _, Ty_MPO, _ = Quantics_TCI(ty, Float64, sites, params.tci_tol)
 
         H_T_R = apply(Tx_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tola, maxdim=params.itensors_maxdim)
+        H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_U = apply(Ty_MPO, T_U; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_D = apply(T_D, ITensors.dag(Ty_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 

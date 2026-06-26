@@ -13,9 +13,9 @@ function construct_rho_0(sys::System, params::AbstractModelParameters ,H_min::Fl
     Id_cpu = Identity_MPO(sys.sites)   # built internally!
     Id = to_gpu(Id_cpu) 
 
-    H = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    H = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) #Computes the MF-Hamiltonian
 
-    μ = real(tr(H) / N) #Technically it should then sum the mean field Hamiltonian. 
+    μ = real(tr(H) / N) 
     @assert H_max > μ > H_min "μ=$μ outside [H_min=$H_min, H_max=$H_max]" 
 
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
@@ -48,10 +48,9 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
  
     cn = nothing
     use_mcweeny = false
-    ρ_old = nothing
     T2_old = 0.0
     idem_error = Inf
-    mpo_rel_change = Inf
+
 
     for i in 1:params.purification_steps
         if verbose > 0
@@ -59,71 +58,52 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
         end
 
         P2 = apply(ρ0, ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        #truncate!(P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        #= Verify if truncation here is necessary or if we can just rely on the truncation in the apply step.=#
+
 
         T1 = real(tr(ρ0))
         T2 = real(tr(P2))
         denom = T1 - T2 
-        #=
-        Denome is the current error in the idempotency! Sum of the lambda_i - lambda_i^2. I want to ensure 0.1% in each eigenvalues, so my error should be denom = 0.1/100 / T1 
-        =#
-        
-        idem_error = denom / T1 
 
-        if ρ_old !== nothing
-            cross_term = real(inner(ρ_old, ρ0))
-            diff_norm_sq = max(0.0, T2 + T2_old - 2.0 * cross_term)
-            mpo_rel_change = sqrt(diff_norm_sq) / sqrt(T2)
-        else
-            mpo_rel_change = Inf
-        end
+        idem_error = denom / T1 
 
         if verbose > 0
             println("  Trace (Ne)           : $T1")
+            println("  Drift in Trace (%)  : $((T1 - Ne) / Ne * 100)")
             println("  Rel Idempotency Error (%): $(idem_error * 100)")
-            println("  Rel Change in MPO (%)   : $(mpo_rel_change * 100)")
         end
-
       
-        # Safe break — MPO stuck but not idempotent
-        if mpo_rel_change < 1e-8 && abs(idem_error) > 0.1/100 # Idempotency error larger than 0.1% but MPO is no longer changing!
-            @warn "Purification stuck: MPO is no longer changing (mpo_rel_change < 1e-8) " *
-                  "but idempotency error is still large (idem_error = $(idem_error*100) %). " *
-                  "Consider increasing maxχ (current: $params.itensors_maxdim)."
-            break
-        end
 
-        ρ_old = copy(ρ0)
-        T2_old = T2
+
 
         P3 = apply(ρ0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        #truncate!(P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         if verbose > 0
-            println(" χ_1: ", linkdims(ρ0),"\n",
-                    " χ_2: ", linkdims(P2),"\n",
-                    " χ_3: ", linkdims(P3))
+            println(" χ_1: ", maxlinkdim(ρ0),"\n",
+                    " χ_2: ", maxlinkdim(P2),"\n",
+                    " χ_3: ", maxlinkdim(P3))
         end
 
         T3 = real(tr(P3))
-
+        
 
        if abs(T1 - Ne) / Ne > 0.1/100
             @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
             return ρ0
-
-        elseif abs(idem_error) < 0.1/100 && mpo_rel_change < 0.1/100 
-            @info "Purification converged: idempotency error and MPO change both below 0.1%. Returning result."
-            return ρ0  # already converged, caught earlier 
-            #= Convergence defined by simulatenous small idempotency error and small change in MPO. This is to catch cases where we are near the fixed point but not exactly at it, and the MPO is no longer changing. =#
-        else
+       end
+       
+       if abs(denom) < 1e-3 #Hard cutoff to avoid numerical issues - test!
+            use_mcweeny = true
+       else
             cn = (T2 - T3) / denom  # normal PM step
-            if abs(cn - 0.5) < 0.02
-                use_mcweeny = true  # near unstable fixed point, hand off to McWeeny
+            if abs(cn - 0.5)/0.5 * 100 < 0.1 # 0.1% from 0.5.
+                use_mcweeny = true  
             end
         end
 
+        if abs(denom)/T1*100 < 1e-1  #0.1# Error in the idempotency is small enough,  Stopping!
+            @info "T1 Similar to T2, converged!"
+            return ρ0
+        end
         if use_mcweeny
             ρ0 = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         else
@@ -148,8 +128,10 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
         
         # Force garbage collection
         GC.gc()
-        
-        CUDA.reclaim()  # Reclaim GPU memory if using CUDA
+        if CUDA.functional()
+            CUDA.reclaim()  # Reclaim GPU memory if using CUDA
+        end
+
     end
 
     @warn "Purification did not converge after $(params.purification_steps) steps. " *

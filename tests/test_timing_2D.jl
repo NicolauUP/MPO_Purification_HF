@@ -8,6 +8,8 @@ using Quantics, QuanticsTCI
 import TensorCrossInterpolation as TCI
 using LinearAlgebra
 using Printf
+using HDF5
+using LinearAlgebra
 
 
 println("CUDA Functional:", CUDA.functional())
@@ -34,32 +36,12 @@ println("="^50)
 
 
 
-function tx_qp(i)
-     x,y = square_lattice_decoder(Int64(i),L)
-     return -1.0 - V2 * (cos(2*pi * τ * (x-0.5)))
-end
-function ty_qp(i)
-     x,y = square_lattice_decoder(Int64(i),L)
-     return -1.0 - V2 * (cos(2*pi * τ * (y-0.5)))
-end
-
-
-
 
 function S(i)
      x,y = square_lattice_decoder(Int64(i),L)
      return W_Amp * (cos(pi*y) * cos(pi*x))
 end
 
-
-using ITensors
-using CUDA
-using HDF5
-using Printf
-using LinearAlgebra # For norm and tr
-
-# Include your local modules here
-# include("src/utils/quantics.jl")
 
 function run_purification(L, V2, W_Amp, maxdim, tol)
     τ = (sqrt(10)-2.0)/2.0
@@ -81,10 +63,21 @@ function run_purification(L, V2, W_Amp, maxdim, tol)
     return ρ_cpu, t_rho0, t_pur
 end
 
+function warmup(L, V2, W_Amp, maxdim, tol)
+    println("\n--- Warmup Run (L=$L) ---")
+    _ = run_purification(L, V2, W_Amp, maxdim, tol)
+    GC.gc()
+    if CUDA.functional()
+         CUDA.reclaim()
+    end
+    return nothing
+end
+
+
 function generate_table_1(L, V2, maxdim, tol)
     println("--- Table 1: MaxBond vs W_Amp (L=$L, V2=$V2) ---")
     
-    W_amps = [1e-5, 0.1, 0.3, 0.5, 1.0]
+    W_amps = [0.1, 0.3, 0.5, 1.0]
     bond_dims = Float64[] # Float64 for homogeneous HDF5 matrix types
     pur_times = Float64[]
     
@@ -166,6 +159,9 @@ function main()
     maxdim  = 500
     tol     = 1e-8
     
+
+    L_warmup = 4
+    warmup(L_warmup, 0.0, 2.0, maxdim, tol)
     # Generate data
     data_t1 = generate_table_1(L_t1_t3, V2, maxdim, tol)
     data_t2 = generate_table_2(V2, W_Amp, maxdim, tol)
