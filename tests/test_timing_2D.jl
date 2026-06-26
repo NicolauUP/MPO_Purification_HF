@@ -57,9 +57,9 @@ function run_purification(L, V2, W_Amp, maxdim, tol)
     t_rho0 = @elapsed ρ0 = construct_rho_0(sys, params, -3.0, 3.0)
     ρ0_gpu = to_gpu(ρ0)
     
-    t_pur = @elapsed ρ_purified = perform_purification(ρ0_gpu, params; verbose=0)
+    t_pur = @elapsed ρ_purified = perform_purification(ρ0_gpu, params; verbose=1)
     ρ_cpu = to_cpu(ρ_purified)
-    
+    println()
     return ρ_cpu, t_rho0, t_pur
 end
 
@@ -96,7 +96,7 @@ end
 function generate_table_2(V2, W_Amp, maxdim, tol)
     println("\n--- Table 2: Time vs L (W_Amp=$W_Amp) ---")
     
-    L_vals = [10, 12, 14, 16, 18, 20]
+    L_vals = [10, 12, 14]#, 16, 18, 20]
     sites  = Float64[]
     rho_times = Float64[]
     pur_times = Float64[]
