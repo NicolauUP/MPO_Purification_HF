@@ -131,19 +131,27 @@ function build_H0(sites, params::ParametersSquare)
  
 
     H0 = nothing
-    tx, ty = params.t
-    if tx isa Number && ty isa Number 
-        println("Using constant hopping tx = $(tx) and ty = $(ty)")
 
-        H0 = +(tx * (T_R + T_L), ty * (T_U + T_D); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    total_bits = length(sites)
+    if params.t[1] isa Number && params.t[2] isa Number 
+        println("Using constant hopping tx = $(params.t[1]) and ty = $(params.t[2])")
+
+        H0 = +(params.t[1] * (T_R + T_L), params.t[2] * (T_U + T_D); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         # H0 = +(H0, ty * (T_U + T_D); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     
 
-    elseif tx isa Function && ty isa Function
-
-        _, Tx_MPO, _ = Quantics_TCI(tx, Float64, sites, params.tci_tol)
-        _, Ty_MPO, _ = Quantics_TCI(ty, Float64, sites, params.tci_tol)
+    elseif params.t[1] isa Function && params.t[2] isa Function
+        tx_1d = z -> begin
+            x,y = square_lattice_decoder(Int(z), total_bits)
+            return params.t[1](x, y)
+        end
+        ty_1d = z -> begin
+            x,y = square_lattice_decoder(Int(z), total_bits)
+            return params.t[2](x, y)
+        end
+        _, Tx_MPO, _ = Quantics_TCI(tx_1d, Float64, sites, params.tci_tol)
+        _, Ty_MPO, _ = Quantics_TCI(ty_1d, Float64, sites, params.tci_tol)
 
         H_T_R = apply(Tx_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
@@ -168,7 +176,7 @@ function build_H0(sites, params::ParametersSquare)
 end
 
 
-function build_seed(sites, params)
+function build_seed(sites, params::Parameters1D)
     HS = nothing
     
     if !isnothing(params.S)
@@ -179,6 +187,21 @@ function build_seed(sites, params)
     return HS
 end
 
+
+function build_seed(sites, params::ParametersSquare)
+    HS = nothing
+    total_bits = length(sites)
+    f_1D = z -> begin
+        x,y = square_lattice_decoder(z, total_bits)
+        return params.S(x, y)
+    end 
+    if !isnothing(params.S)
+        println("Using seed for TCI: $(params.S)")
+        _, S_MPO, _ = Quantics_TCI(f_1D, Float64, sites, params.tci_tol)
+        HS = S_MPO
+    end
+    return HS
+end
 
 function build_fock(sys::System)
     sites = sys.sites

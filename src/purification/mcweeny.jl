@@ -152,9 +152,7 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
           "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
     return ρ0
 end
-
-
-function perform_purification_grandcanonical(sys::System, params::AbstractModelParameters,H_min::Float64,H_max::Float64;verbose::Int=1, to_gpu=identity)
+function perform_purification_grandcanonical(sys::System, params::AbstractModelParameters, H_min::Float64, H_max::Float64; verbose::Int=1, to_gpu=identity)
 
     N = 2^params.L
     Ne = round(Int, N * params.density)
@@ -163,15 +161,12 @@ function perform_purification_grandcanonical(sys::System, params::AbstractModelP
         println("N = $N, density = $(params.density), Ne = $Ne")
     end
 
-    idempotency_tol = 1e-3 # 0.1% idempotency error tolerance
-    #Here, we will implement a bissection search of the chemical potential, to avoid precise trace calculations, which fail with bound dimension limits!
+    idempotency_tol = 1e-3 
+    mu_low = -1.0
+    mu_high = 1.0
+    rho_new = nothing 
 
-
-    mu_low = H_min
-    mu_high = H_max
-    rho_new = nothing #Outer scope 
-
-    while (mu_high - mu_low) > 1e-7
+    while (mu_high - mu_low) > 1e-4
         mu = (mu_high + mu_low) / 2.0
         
         if verbose > 0
@@ -180,62 +175,53 @@ function perform_purification_grandcanonical(sys::System, params::AbstractModelP
 
         rho_0 = construct_rho_0_mcweeny(sys, params, mu, H_min, H_max; to_gpu=to_gpu)
         
-        abort_flag = false
-
         for i in 1:params.purification_steps
             if verbose > 0 
                 println("     --- Step $i ---")
             end
+            
             T0 = real(tr(rho_0))        
-            println("     Trace (Ne)           : $T0")
+            
+            if verbose > 0
+                println("     Trace (Ne)           : $T0")
+            end
 
             P2 = apply(rho_0, rho_0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
             T2 = real(tr(P2))
 
-            idem_error = abs(T2 - T0) / max(T0,1.0)  # Avoid division by zero
-            if idem_error < idempotency_tol
+            P3 = apply(rho_0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+            rho_new = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) 
+            
+            if verbose > 0
+                println(" Bond: ", maxlinkdim(rho_new))
+            end
 
+            T1 = real(tr(rho_new))
+            idem_error = abs(T2 - T0) / max(T0, 1.0)  
+            
+            if idem_error < idempotency_tol
                 if verbose > 0 
                     println("Converged at step $i. Trace: $T0, Idempotency Error: $idem_error")
                 end
-                return rho_0
-            end
-
-
-
-
-            P3 = apply(rho_0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-            rho_new = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) #Simple Mcweeny Update!
-            println(" Bond: ", maxlinkdim(rho_new))
-            T1 = real(tr(rho_new))
-
-            #======== Verify if we are above or below the target Ne =#
-            if T1 - Ne > 0.5 && (T1 - T0) > 0  #We are above the target, by 0.5 particles and the trace is increasing!
-                mu_high = mu
-                abort_flag = true
-                break
-            elseif T1 - Ne < -0.5 && (T1 - T0) < 0  #We are below the target, by 0.5 particles and the trace is decreasing!
-                mu_low = mu
-                abort_flag = true
                 break
             end
-
             rho_0 = rho_new
         end
 
-        if !abort_flag
-            @warn "Inner loop maxed out without aborting. Forcing bissection update."
-            if real(tr(rho_new)) > Ne
-                mu_high = mu
-            else
-                mu_low = mu
+        T_final = real(tr(rho_new))
+
+        if abs(T_final - Ne) < 0.5
+            if verbose > 0 
+                println("Final trace $T_final is within tolerance of Ne=$Ne. Converged.")
             end
+            return rho_new
+        elseif T_final > Ne
+            mu_high = mu
+        else
+            mu_low = mu
         end
-    end
-    @warn "Bissection resolution limit reached."
+    end # Added missing end statement
+
+    @warn "Bisection resolution limit reached."
     return rho_new
 end
-
-            
-
-

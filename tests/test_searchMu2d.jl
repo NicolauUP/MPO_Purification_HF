@@ -25,13 +25,24 @@ println("HartreeFockMPO — Search of the chemical potential in McWeeny purifica
 println("="^50)
 
 τ = (sqrt(10)-2.0)/2.0
-# t(x) = -1.0 - 2.0 * cos(2π * τ * (x - 0.5))
+
 tx = -1.0
 ty = -1.0
 t = (tx, ty)
 U = 0.3
 W = nothing
-S(x) = 0.25 + 0.1 * cos(π * x)
+
+S_pi(x, y) = 0.1 * cos(π * (x + y)) 
+
+# Aubry-André potential
+# τ is your irrational parameter, e.g., (sqrt(5)-1)/2
+S_AA(x, y) = 0.2 * cos(2π * τ * x + 0.5) 
+
+# 2. Superposition function
+S(x, y) = S_pi(x, y) + S_AA(x, y)
+
+
+
  
 tci_tol = 1e-6
 itensors_tol = 1e-10
@@ -47,8 +58,8 @@ scf_max_iterations = 100
 # ─────────────────────────────────────────
 println("\n--- JIT Warmup (L=4) ---")
 
-# Corrected to use Parameters1D and keyword arguments
-params_warmup = Parameters1D(
+# Corrected to use ParametersSquare and keyword arguments
+params_warmup = ParametersSquare(
     L=4, t=t, U=U, W=W, S=S, 
     tci_tol=tci_tol, itensors_tol=itensors_tol, 
     itensors_maxdim=itensors_maxdim, density=density, 
@@ -69,20 +80,7 @@ println("Warmup complete. JIT compilation done.\n")
 # ─────────────────────────────────────────
 L = 10
 
-# Corrected to use Parameters1D and keyword arguments
-params = Parameters1D(
-    L=L, t=t, U=U, W=W, S=S, 
-    tci_tol=tci_tol, itensors_tol=itensors_tol, 
-    itensors_maxdim=itensors_maxdim, density=density, 
-    purification_steps=purification_steps, scf_mixing=scf_mixing, 
-    scf_tol=scf_tol, scf_max_iterations=scf_max_iterations
-)
-
-sys = System(params)
-
-L = 10
-
-
+# Corrected to use ParametersSquare   and keyword arguments
 params = ParametersSquare(
     L=L, t=t, U=U, W=W, S=S, 
     tci_tol=tci_tol, itensors_tol=itensors_tol, 
@@ -91,6 +89,7 @@ params = ParametersSquare(
     scf_tol=scf_tol, scf_max_iterations=scf_max_iterations
 )
 
+sys = System(params)
 
 
 t_purification = @elapsed begin
@@ -113,10 +112,16 @@ for i in 1:2^L
     push!(values, MatrixChecker(ρ_purified,sys.sites, i, j, sys.bra_states, sys.ket_states))
 end
 
-output_file = "test_searchMiu_values.h5"
+mat_diagonal = zeros(ComplexF64, 2^(div(L, 2)),2^(div(L, 2)))
+for i in 1:2^L
+    x,y = square_lattice_decoder(i-1, L)
+    mat_diagonal[x+1,y+1] = MatrixChecker(ρ_purified,sys.sites, i, i, sys.bra_states, sys.ket_states)
+end
+output_file = "test_searchMiu_values_2D.h5"
 h5open(output_file, "w") do h5
     write(h5, "values", values)
     write(h5, "j", j)
+    write(h5, "mat_diagonal", mat_diagonal)
 end
 println("Saved values to ", output_file)
 
