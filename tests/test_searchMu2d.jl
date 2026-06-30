@@ -36,7 +36,7 @@ S_pi(x, y) = 0.1 * cos(π * (x + y))
 
 # Aubry-André potential
 # τ is your irrational parameter, e.g., (sqrt(5)-1)/2
-S_AA(x, y) = 0.2 * cos(2π * τ * x + 0.5) 
+S_AA(x, y) = 0.2 * cos(2π * τ * x + 0.5) * cos(2π * τ * y + 0.5) 
 
 # 2. Superposition function
 S(x, y) = S_pi(x, y) + S_AA(x, y)
@@ -78,7 +78,7 @@ println("Warmup complete. JIT compilation done.\n")
 # ─────────────────────────────────────────
 # Timed real run — L=30
 # ─────────────────────────────────────────
-L = 10
+L = 8
 
 # Corrected to use ParametersSquare   and keyword arguments
 params = ParametersSquare(
@@ -117,11 +117,19 @@ for i in 1:2^L
     x,y = square_lattice_decoder(i-1, L)
     mat_diagonal[x+1,y+1] = MatrixChecker(ρ_purified,sys.sites, i, i, sys.bra_states, sys.ket_states)
 end
+
+j = 2^(L-1)+5
+mat_densitymatrix_fixedj = zeros(ComplexF64, 2^(div(L, 2)),2^(div(L, 2)))
+for i in 1:2^L
+    x,y = square_lattice_decoder(i-1, L)
+    mat_densitymatrix_fixedj[x+1,y+1] = MatrixChecker(ρ_purified,sys.sites, i, j, sys.bra_states, sys.ket_states)
+end
 output_file = "test_searchMiu_values_2D.h5"
 h5open(output_file, "w") do h5
     write(h5, "values", values)
     write(h5, "j", j)
     write(h5, "mat_diagonal", mat_diagonal)
+    write(h5, "mat_densitymatrix_fixedj", mat_densitymatrix_fixedj)
 end
 println("Saved values to ", output_file)
 

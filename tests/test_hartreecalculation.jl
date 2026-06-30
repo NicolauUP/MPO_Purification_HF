@@ -34,26 +34,23 @@ itensors_maxdim = 100
 density = 0.5
 purification_steps = 40
 
-params = ModelParameters(L, t, U, W,S, tci_tol, itensors_tol, itensors_maxdim, density, purification_steps)
+params = Parameters1D(L, t, U, W,S, tci_tol, itensors_tol, itensors_maxdim, density, purification_steps)
 sys = System(params)
 
-println("System constructed successfully:")
-println()
-show(sys)
 
-ρ0 = construct_rho_0(sys, params, -3.0, 3.0)
-println("\n--- Test 3: Purification Check ---")
-ρ_purified = perform_purification(ρ0, params; verbose=1)
+# TODO:
+#= 
+ 1) Compute density matrix 
+ 2.1) Compute Hartree potencial for the dense matrix of rho
+ 2.2) Compute Hartree potential from the contractions and Quantics
+ 2.3) Compare the two Hartree potentials
 
-sys.ρ = ρ_purified
-println("\n--- Test 2: MPO Check ---")
-@time vh_mpo = extract_hartree_mpo_1d(sys)
+ 3.1) Compute Fock potencial for the dense matrix of rho
+ 3.2) Compute Fock potential from the contractions and Quantics
+ 3.3) Compare the two Fock potentials
 
-print("\nHartree MPO extracted successfully. Checking values...\n")
-for i in 1:2^L
-    val = MatrixChecker(vh_mpo, sys.sites, i , i , sys.bra_states, sys.ket_states)
-    if abs(val) > 1e-6
-        println(@sprintf "<%.0f|VH|%.0f> = %8.3f   " i-1 i-1 val)
-    end
-end
-println()
+ 4) Verify Mean Field hamiltonian MPO it's the same!
+
+ 5) Run self-consistent loop and check convergence!
+
+=#
