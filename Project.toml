@@ -1,10 +1,11 @@
 name = "MPO_MeanField"
 uuid = "5ef1587e-7cf5-4a86-8532-77b9aebd82b1"
-version = "0.1.0"
 authors = ["NicolauUP <up201805451@up.pt>"]
+version = "0.1.0"
 
 [deps]
 CUDA = "052768ef-5323-5732-b1bb-66c8b64840ba"
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
 ITensorMPS = "0d1a4710-d33b-49a5-8f18-73bdf49b47e2"
 ITensors = "9136182c-28ba-11e9-034c-db9fb085ebd5"
@@ -14,3 +15,6 @@ Quantics = "87f76fb3-a40a-40c9-a63c-29fcfe7b7547"
 QuanticsTCI = "b11687fd-3a1c-4c41-97d0-998ab401d50e"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 TensorCrossInterpolation = "b261b2ec-6378-4871-b32e-9173bb050604"
+
+[compat]
+GLMakie = "0.13.12"

@@ -14,6 +14,7 @@ function (he::HartreeEvaluate1D)(i_float::Real)
 
     for j in neighbors
         if 1 <= j <= 2^L
+            # OK, HERE I COULD ADD A CACHE! IF n_j already computed, save in a dictionary and reuse it. For now, i don't believe this is necessary.
             n_j = MatrixChecker(he.sys.ρ, 
                                 he.sys.sites,
                                  j,
@@ -25,6 +26,7 @@ function (he::HartreeEvaluate1D)(i_float::Real)
             v_hartree += n_j * he.sys.params.U 
         end
     end
+       
     return v_hartree
 end
 
@@ -79,7 +81,7 @@ function extract_fock_mpo_1d(sys::System)
     fe = FockEvaluator1D(sys)
     _, F_MPO, _ = Quantics_TCI(x -> fe(x), Float64, sites, params.tci_tol)
     
-    T_R, T_L = _build_translation_chain(sites) 
+    T_R, T_L = build_translation_chain(sites) 
     
 
     VF_R = apply(F_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)

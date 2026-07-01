@@ -26,7 +26,7 @@ println("="^50)
 
 τ = (sqrt(10)-2.0)/2.0
 # t(x) = -1.0 - 2.0 * cos(2π * τ * (x - 0.5))
-tx = -1.0
+t(x) = -1.0 - 2.0 * cos(2π * τ * (x - 0.5))
 ty = -1.0
 t = (tx, ty)
 U = 0.3
@@ -80,16 +80,7 @@ params = Parameters1D(
 
 sys = System(params)
 
-L = 10
 
-
-params = ParametersSquare(
-    L=L, t=t, U=U, W=W, S=S, 
-    tci_tol=tci_tol, itensors_tol=itensors_tol, 
-    itensors_maxdim=itensors_maxdim, density=density, 
-    purification_steps=purification_steps, scf_mixing=scf_mixing, 
-    scf_tol=scf_tol, scf_max_iterations=scf_max_iterations
-)
 
 
 
