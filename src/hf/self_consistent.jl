@@ -11,6 +11,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     to_cpu=identity,
     cleanup= () -> nothing)
 
+    sys.params isa ParametersSquare && throw(ArgumentError(
+        "square-lattice SCF is unsupported: square Hartree/Fock field extraction is not implemented",
+    ))
+
 
     if verbose == :all
         println("Starting SCF iterations with parameters:")
