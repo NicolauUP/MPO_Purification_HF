@@ -6,6 +6,18 @@ function _sp2_hermiticity_tolerance(params::AbstractModelParameters)
     return max(1e-10, 10params.itensors_tol)
 end
 
+function _sp2_branch(trace_value::Real, trace_squared::Real, Ne::Int, trace_tolerance::Real)
+    trace_hole = 2trace_value - trace_squared
+    if trace_value > Ne + trace_tolerance
+        return :square
+    elseif trace_value < Ne - trace_tolerance
+        return :hole
+    elseif abs(trace_squared - Ne) <= abs(trace_hole - Ne) + trace_tolerance
+        return :square
+    end
+    return :hole
+end
+
 """
     perform_purification_sp2(rho0, params; ...)
 
@@ -97,14 +109,8 @@ function perform_purification_sp2(
         end
         previous_idempotency = idem
 
-        trace_hole = 2trace_value - trace_squared
-        if trace_value > Ne + trace_tolerance
-            rho = rho_squared
-        elseif trace_value < Ne - trace_tolerance
-            rho = +(2.0 * rho, -rho_squared;
-                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
-            )
-        elseif abs(trace_squared - Ne) <= abs(trace_hole - Ne) + trace_tolerance
+        branch = _sp2_branch(trace_value, trace_squared, Ne, trace_tolerance)
+        if branch == :square
             rho = rho_squared
         else
             rho = +(2.0 * rho, -rho_squared;
