@@ -112,7 +112,8 @@ ModelParameters{Tt, Tu, Tw, Ts}
   │
   ├──► ρ0 = construct_rho_0(sys, ...)          # Bakes H_eff = H0 + VH into initial guess
   │
-  ├──► ρ = perform_purification(ρ0, params)    # Pushes eigenvalues to {0, 1}
+  ├──► result = perform_purification(ρ0, params) # Density plus convergence diagnostics
+  ├──► ρ = result.rho                          # Consume only a converged result by default
   │
   ├──► new_VH = build_hartree(sys)             # TCI probes new ρ, builds next Hartree MPO
   │

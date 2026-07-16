@@ -10,10 +10,11 @@ include("core/operators.jl")
 include("core/system.jl")
 include("../src/hamiltonians/mpo_construction.jl")
 include("../src/utils/quantics.jl")
+include("../src/purification/result.jl")
 include("../src/purification/mcweeny.jl")
 include("../src/tci/modulations.jl")
 include("../src/tci/density_matrix.jl")
 include("../src/hf/self_consistent.jl")
 
-export Parameters1D, ParametersSquare, System, extract_hartree_mpo_1d, extract_fock_mpo_1d, run_scf!, MatrixChecker, construct_rho_0, perform_purification, build_translation_square, square_lattice_decoder, perform_purification_grandcanonical
+export Parameters1D, ParametersSquare, System, PurificationResult, extract_hartree_mpo_1d, extract_fock_mpo_1d, run_scf!, MatrixChecker, construct_rho_0, perform_purification, build_translation_square, square_lattice_decoder, perform_purification_grandcanonical
 end # module MPO_MeanField

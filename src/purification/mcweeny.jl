@@ -50,8 +50,9 @@ end
 Adaptive purification scheme. Starts with a trace-correcting linear update
 and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
 
-Returns the purified density matrix ρ, or a partially purified ρ with a
-warning if convergence fails.
+Returns a [`PurificationResult`](@ref) containing the density matrix and
+termination diagnostics. The current adaptive PM/McWeeny stopping criterion
+is preserved unchanged.
 """
 function perform_purification(
     ρ0::MPO,
@@ -105,7 +106,13 @@ function perform_purification(
        if abs(T1 - Ne) / Ne > 0.1/100
             verbose > 0 && finish_iteration_progress(io, overwrite_progress)
             @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
-            return ρ0
+            return purification_result(
+                ρ0, params;
+                method=:adaptive_pm_mcweeny,
+                converged=false,
+                termination_reason=:trace_drift,
+                iterations=i,
+            )
        end
        
        if abs(denom) < 1e-3 #Hard cutoff to avoid numerical issues - test!
@@ -120,7 +127,13 @@ function perform_purification(
         if abs(denom)/T1*100 < 1e-1  #0.1# Error in the idempotency is small enough,  Stopping!
             verbose > 0 && finish_iteration_progress(io, overwrite_progress)
             verbose > 0 && println(io, "Purification converged at step $i.")
-            return ρ0
+            return purification_result(
+                ρ0, params;
+                method=:adaptive_pm_mcweeny,
+                converged=true,
+                termination_reason=:idempotency_threshold,
+                iterations=i,
+            )
         end
         if use_mcweeny
             ρ0 = +(3.0 * P2, -2.0 * P3; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
@@ -156,7 +169,13 @@ function perform_purification(
     @warn "Purification did not converge after $(params.purification_steps) steps. " *
           "Final idempotency error: $idem_error. " *
           "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
-    return ρ0
+    return purification_result(
+        ρ0, params;
+        method=:adaptive_pm_mcweeny,
+        converged=false,
+        termination_reason=:max_iterations,
+        iterations=params.purification_steps,
+    )
 end
 function perform_purification_grandcanonical(sys::System, params::AbstractModelParameters, H_min::Float64, H_max::Float64; verbose::Int=1, to_gpu=identity)
 

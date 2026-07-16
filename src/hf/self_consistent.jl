@@ -2,6 +2,7 @@
 
 function run_scf!(sys::System, H_min::Float64, H_max::Float64; 
     verbose::Symbol=:nothing,
+    allow_unconverged_purification::Bool=false,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -40,9 +41,16 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         end
 
         purification_verbose = verbose == :nothing ? 0 : 1
-        ρ_purified_device = perform_purification(
+        purification = perform_purification(
             ρ0_device, params; verbose=purification_verbose,
         )
+        if !purification.converged && !allow_unconverged_purification
+            verbose != :nothing && println(
+                "SCF stopped: purification ended with $(purification.termination_reason).",
+            )
+            return false
+        end
+        ρ_purified_device = purification.rho
 
         if verbose == :Density
             T1_purified = real(tr(ρ_purified_device))
