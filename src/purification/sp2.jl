@@ -7,12 +7,11 @@ function _sp2_hermiticity_tolerance(params::AbstractModelParameters)
 end
 
 """
-    perform_purification_sp2(rho0, params; fermi_gap, ...)
+    perform_purification_sp2(rho0, params; ...)
 
 Canonical trace-correcting second-order purification. Each iteration forms one
 compressed square and selects either `X²` or `2X-X²` by its trace relative to
-the requested occupation. A positive `fermi_gap` certificate is required under
-the default `:reject` degeneracy policy.
+the requested occupation.
 """
 function perform_purification_sp2(
     rho0::MPO,
@@ -22,12 +21,7 @@ function perform_purification_sp2(
     overwrite_progress::Bool=io isa Base.TTY,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
-    fermi_gap::Union{Nothing,Real}=nothing,
-    degeneracy_policy::Symbol=:reject,
 )
-    degeneracy_policy == :reject || throw(ArgumentError(
-        "only degeneracy_policy=:reject is implemented for SP2, got $degeneracy_policy",
-    ))
     !isnothing(spectral_bounds) || throw(ArgumentError(
         "SP2 requires explicit enclosing spectral_bounds",
     ))
@@ -39,20 +33,6 @@ function perform_purification_sp2(
     trace_tolerance = _sp2_trace_tolerance(params, Ne)
     hermiticity_tolerance = _sp2_hermiticity_tolerance(params)
     idempotency_tolerance = 1e-3
-
-    if isnothing(fermi_gap) || !isfinite(fermi_gap) || fermi_gap <= 0
-        return purification_result(
-            rho0, params;
-            method=:sp2,
-            converged=false,
-            termination_reason=:ambiguous_fermi_level,
-            iterations=0,
-            spectral_bounds=spectral_bounds,
-            spectral_bounds_validation=spectral_bounds_validation,
-            fermi_gap=fermi_gap,
-            degeneracy_policy=degeneracy_policy,
-        )
-    end
 
     verbose > 0 && println(io, "SP2 purifying N=$N, density=$(params.density), Ne=$Ne")
     rho = rho0
@@ -95,8 +75,6 @@ function perform_purification_sp2(
                 iterations=iteration,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
-                fermi_gap=fermi_gap,
-                degeneracy_policy=degeneracy_policy,
             )
         end
 
@@ -115,8 +93,6 @@ function perform_purification_sp2(
                 iterations=iteration,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
-                fermi_gap=fermi_gap,
-                degeneracy_policy=degeneracy_policy,
             )
         end
         previous_idempotency = idem
@@ -147,7 +123,5 @@ function perform_purification_sp2(
         iterations=params.purification_steps,
         spectral_bounds=spectral_bounds,
         spectral_bounds_validation=spectral_bounds_validation,
-        fermi_gap=fermi_gap,
-        degeneracy_policy=degeneracy_policy,
     )
 end

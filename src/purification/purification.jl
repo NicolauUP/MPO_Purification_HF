@@ -13,7 +13,6 @@ function perform_purification(
     overwrite_progress::Bool=io isa Base.TTY,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
-    fermi_gap::Union{Nothing,Real}=nothing,
     chemical_potential::Union{Nothing,Real}=nothing,
 )
     if method == :sp2
@@ -24,7 +23,6 @@ function perform_purification(
             overwrite_progress=overwrite_progress,
             spectral_bounds=spectral_bounds,
             spectral_bounds_validation=spectral_bounds_validation,
-            fermi_gap=fermi_gap,
         )
     elseif method == :mcweeny_mu
         return perform_purification_mcweeny_mu(rho0, params;

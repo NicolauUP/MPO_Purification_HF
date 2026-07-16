@@ -6,15 +6,11 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     verify_spectral_bounds::Bool=false,
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:sp2,
-    sp2_fermi_gap::Union{Nothing,Real}=nothing,
     chemical_potential::Union{Nothing,Real}=nothing,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
 
-    purification_method == :sp2 && isnothing(sp2_fermi_gap) && throw(ArgumentError(
-        "default purification_method=:sp2 requires a positive sp2_fermi_gap",
-    ))
 
     if verbose == :all
         println("Starting SCF iterations with parameters:")
@@ -65,7 +61,6 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 verify_spectral_bounds ? :exact_small_system : :supplied_unverified
             ),
             method=purification_method,
-            fermi_gap=sp2_fermi_gap,
             chemical_potential=chemical_potential,
         )
         if !purification.converged && !allow_unconverged_purification
