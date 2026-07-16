@@ -17,6 +17,8 @@ struct PurificationResult{R}
     final_bond_dimension::Int
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}
     spectral_bounds_validation::Symbol
+    fermi_gap::Union{Nothing,Float64}
+    degeneracy_policy::Symbol
     truncation_cutoff::Float64
     maxdim::Int
 end
@@ -100,6 +102,8 @@ function purification_result(
     iterations::Int,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
+    fermi_gap::Union{Nothing,Real}=nothing,
+    degeneracy_policy::Symbol=:not_applicable,
 )
     Ne = round(Int, 2^params.L * params.density)
     rho_squared = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
@@ -120,6 +124,8 @@ function purification_result(
         maxlinkdim(rho),
         spectral_bounds,
         spectral_bounds_validation,
+        isnothing(fermi_gap) ? nothing : Float64(fermi_gap),
+        degeneracy_policy,
         params.itensors_tol,
         params.itensors_maxdim,
     )

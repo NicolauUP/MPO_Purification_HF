@@ -77,7 +77,24 @@ function perform_purification(
     overwrite_progress::Bool=io isa Base.TTY,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
+    method::Symbol=:adaptive_pm_mcweeny,
+    fermi_gap::Union{Nothing,Real}=nothing,
 )
+
+    if method == :sp2
+        return perform_purification_sp2(
+            ρ0, params;
+            verbose=verbose,
+            io=io,
+            overwrite_progress=overwrite_progress,
+            spectral_bounds=spectral_bounds,
+            spectral_bounds_validation=spectral_bounds_validation,
+            fermi_gap=fermi_gap,
+        )
+    end
+    method == :adaptive_pm_mcweeny || throw(ArgumentError(
+        "unknown purification method $method; supported methods are :adaptive_pm_mcweeny and :sp2",
+    ))
 
     if !isnothing(spectral_bounds)
         spectral_bounds = validate_spectral_bounds(spectral_bounds...)

@@ -5,6 +5,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     allow_unconverged_purification::Bool=false,
     verify_spectral_bounds::Bool=false,
     spectral_safety_margin::Float64=0.0,
+    purification_method::Symbol=:adaptive_pm_mcweeny,
+    sp2_fermi_gap::Union{Nothing,Real}=nothing,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -36,7 +38,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
         end
         # Step 1: Obtain density matrix!
-        ρ0_device = construct_rho_0(
+        constructor = purification_method == :sp2 ? construct_rho_0_sp2 : construct_rho_0
+        ρ0_device = constructor(
             sys, params, H_min, H_max;
             to_gpu=to_gpu,
             verify_spectral_bounds=verify_spectral_bounds,
@@ -55,6 +58,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             spectral_bounds_validation=(
                 verify_spectral_bounds ? :exact_small_system : :supplied_unverified
             ),
+            method=purification_method,
+            fermi_gap=sp2_fermi_gap,
         )
         if !purification.converged && !allow_unconverged_purification
             verbose != :nothing && println(
