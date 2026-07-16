@@ -37,4 +37,20 @@ end
     _, _, limited = sp2_diagonal_result(values, 2; steps=1)
     @test !limited.converged
     @test limited.termination_reason == :max_iterations
+
+    # Same width, distinct positive Fermi gaps: both must select the exact rank-2 projector.
+    for gap_values in ((-2.0, -1.0, 1.0, 2.0), (-2.0, -1e-3, 1e-3, 2.0))
+        sys, H, result = sp2_diagonal_result(gap_values, 2; steps=35)
+        @test result.converged
+        @test opnorm(dense_matrix(result.rho, sys) - exact_occupied_projector(H, 2)) < 2e-3
+    end
+
+    # H -> aH + bI with transformed bounds must preserve the occupied projector.
+    reference_sys, _, reference = sp2_diagonal_result(values, 2)
+    shifted_scaled = tuple((1.7 * value + 0.4 for value in values)...)
+    transformed_sys, _, transformed = sp2_diagonal_result(shifted_scaled, 2)
+    @test reference.converged && transformed.converged
+    @test opnorm(
+        dense_matrix(reference.rho, reference_sys) - dense_matrix(transformed.rho, transformed_sys),
+    ) < 2e-3
 end
