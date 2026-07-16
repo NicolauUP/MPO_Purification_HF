@@ -10,7 +10,13 @@ end
     successful = perform_purification(successful_rho0, successful_params; verbose=0)
 
     @test successful isa PurificationResult
-    @test successful.method == :adaptive_pm_mcweeny
+    @test successful.method == :palser_manolopoulos
+    legacy_alias = perform_purification(
+        successful_rho0, successful_params;
+        method=:adaptive_pm_mcweeny,
+        verbose=0,
+    )
+    @test legacy_alias.method == :palser_manolopoulos
     @test successful.converged
     @test successful.termination_reason == :idempotency_threshold
     @test 1 <= successful.iterations <= successful_params.purification_steps

@@ -71,7 +71,7 @@ function perform_purification_palser_manolopoulos(
             @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
             return purification_result(
                 ρ0, params;
-                method=:adaptive_pm_mcweeny,
+                method=:palser_manolopoulos,
                 converged=false,
                 termination_reason=:trace_drift,
                 iterations=i,
@@ -94,7 +94,7 @@ function perform_purification_palser_manolopoulos(
             verbose > 0 && println(io, "Purification converged at step $i.")
             return purification_result(
                 ρ0, params;
-                method=:adaptive_pm_mcweeny,
+                method=:palser_manolopoulos,
                 converged=true,
                 termination_reason=:idempotency_threshold,
                 iterations=i,
@@ -138,7 +138,7 @@ function perform_purification_palser_manolopoulos(
           "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
     return purification_result(
         ρ0, params;
-        method=:adaptive_pm_mcweeny,
+        method=:palser_manolopoulos,
         converged=false,
         termination_reason=:max_iterations,
         iterations=params.purification_steps,

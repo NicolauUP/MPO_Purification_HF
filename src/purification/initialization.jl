@@ -1,9 +1,9 @@
 """
     construct_rho_0(sys, params, H_min, H_max;
-                    method=:adaptive_pm_mcweeny, verify_spectral_bounds=false)
+                    method=:palser_manolopoulos, verify_spectral_bounds=false)
 
 Build an initial density-matrix MPO from the effective Hamiltonian.
-`method=:adaptive_pm_mcweeny` uses the trace-correcting linear map, while
+`method=:palser_manolopoulos` uses the trace-correcting linear map, while
 `method=:sp2` uses the canonical SP2 spectral map. Bounds are user supplied.
 Setting `verify_spectral_bounds=true` performs an exact, small-system CPU
 validation before scaling.
@@ -16,10 +16,10 @@ function construct_rho_0(
     to_gpu=identity,
     verify_spectral_bounds::Bool=false,
     safety_margin::Float64=0.0,
-    method::Symbol=:adaptive_pm_mcweeny,
+    method::Symbol=:palser_manolopoulos,
     chemical_potential::Union{Nothing,Real}=nothing,
 )
-    if method == :adaptive_pm_mcweeny
+    if method == :palser_manolopoulos || method == :adaptive_pm_mcweeny
         return _construct_rho_0_adaptive(
             sys, params, H_min, H_max;
             to_gpu=to_gpu,
@@ -38,7 +38,7 @@ function construct_rho_0(
         return construct_rho_0_mcweeny(sys, params, chemical_potential, H_min, H_max; to_gpu=to_gpu)
     end
     throw(ArgumentError(
-        "unknown purification method $method; supported methods are :adaptive_pm_mcweeny and :sp2",
+        "unknown purification method $method; supported methods are :palser_manolopoulos, :mcweeny_mu, and :sp2",
     ))
 end
 
