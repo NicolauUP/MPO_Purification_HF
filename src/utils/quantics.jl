@@ -46,6 +46,34 @@
         return scalar(V)
     end
 
+function zero_mpo(sites::Vector{<:Index})
+    return 0.0 * Identity_MPO(sites)
+end
+
+function diagonal_mpo_from_function(
+    f::Function,
+    eltype::Type{<:Number},
+    sites::Vector{<:Index},
+    tolerance::Float64,
+)
+    try
+        _, mpo, _ = Quantics_TCI(f, eltype, sites, tolerance)
+        return mpo
+    catch err
+        if err isa ErrorException && occursin("maxsamplevalue is zero", err.msg)
+            return zero_mpo(sites)
+        end
+        rethrow()
+    end
+end
+
+function safe_relative_change(diff_norm::Real, reference_norm::Real; floor::Real=sqrt(eps(Float64)))
+    diff_norm >= 0 || throw(ArgumentError("diff_norm must be nonnegative"))
+    reference_norm >= 0 || throw(ArgumentError("reference_norm must be nonnegative"))
+    floor > 0 || throw(ArgumentError("floor must be positive"))
+    return diff_norm / max(reference_norm, floor)
+end
+
 
 
 """

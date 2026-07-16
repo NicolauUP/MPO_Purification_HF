@@ -48,8 +48,55 @@ mutable struct System{P}
     ket_states::Any
 end
 
+function _validate_common_parameters(params::AbstractModelParameters)
+    params.L > 0 || throw(ArgumentError("L must be positive, got $(params.L)"))
+    params.U isa Real || throw(ArgumentError("U must be a real scalar; spatially dependent and complex interactions are not implemented"))
+    isfinite(params.U) || throw(ArgumentError("U must be finite, got $(params.U)"))
+    isfinite(params.tci_tol) && params.tci_tol > 0 || throw(ArgumentError("tci_tol must be finite and positive, got $(params.tci_tol)"))
+    isfinite(params.itensors_tol) && params.itensors_tol > 0 || throw(ArgumentError("itensors_tol must be finite and positive, got $(params.itensors_tol)"))
+    params.itensors_maxdim > 0 || throw(ArgumentError("itensors_maxdim must be positive, got $(params.itensors_maxdim)"))
+    params.purification_steps > 0 || throw(ArgumentError("purification_steps must be positive, got $(params.purification_steps)"))
+    isfinite(params.scf_mixing) && 0.0 <= params.scf_mixing <= 1.0 || throw(ArgumentError("scf_mixing must be finite and lie in [0, 1], got $(params.scf_mixing)"))
+    isfinite(params.scf_tol) && params.scf_tol > 0 || throw(ArgumentError("scf_tol must be finite and positive, got $(params.scf_tol)"))
+    params.scf_max_iterations > 0 || throw(ArgumentError("scf_max_iterations must be positive, got $(params.scf_max_iterations)"))
+    isfinite(params.density) && 0.0 < params.density < 1.0 || throw(ArgumentError("density must be finite and lie strictly between 0 and 1; empty and full fillings are not implemented"))
+
+    N = try
+        Base.Checked.checked_pow(2, params.L)
+    catch err
+        err isa OverflowError || rethrow()
+        throw(ArgumentError("L=$(params.L) is too large to represent N=2^L with Int"))
+    end
+    Ne = round(Int, N * params.density)
+    0 < Ne < N || throw(ArgumentError("density=$(params.density) rounds to unsupported occupation Ne=$Ne for N=$N"))
+    return nothing
+end
+
+function validate_parameters(params::Parameters1D)
+    _validate_common_parameters(params)
+    (params.t isa Number || params.t isa Function) || throw(ArgumentError("1D hopping t must be a number or function"))
+    params.t isa Number && !isfinite(params.t) && throw(ArgumentError("numeric hopping t must be finite"))
+    (isnothing(params.W) || params.W isa Function) || throw(ArgumentError("W must be nothing or a function"))
+    (isnothing(params.S) || params.S isa Function) || throw(ArgumentError("S must be nothing or a function"))
+    return nothing
+end
+
+function validate_parameters(params::ParametersSquare)
+    _validate_common_parameters(params)
+    iseven(params.L) || throw(ArgumentError("ParametersSquare requires even L, got $(params.L)"))
+    length(params.t) == 2 || throw(ArgumentError("square hopping t must contain exactly (t_x, t_y)"))
+    all(component -> component isa Number || component isa Function, params.t) ||
+        throw(ArgumentError("each square hopping component must be a number or function"))
+    all(component -> !(component isa Number) || isfinite(component), params.t) ||
+        throw(ArgumentError("numeric square hopping components must be finite"))
+    (isnothing(params.W) || params.W isa Function) || throw(ArgumentError("W must be nothing or a function"))
+    (isnothing(params.S) || params.S isa Function) || throw(ArgumentError("S must be nothing or a function"))
+    return nothing
+end
+
 
 function System(params::AbstractModelParameters)
+    validate_parameters(params)
     sites = ITensors.siteinds("Qubit", params.L)
     
 

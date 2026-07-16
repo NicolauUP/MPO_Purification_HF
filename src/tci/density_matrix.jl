@@ -37,15 +37,14 @@ Runs TCI to generate the 1D Hartree MPO.
 """
 
 function extract_hartree_mpo_1d(sys::System)
+    iszero(sys.params.U) && return zero_mpo(sys.sites)
     evaluator = HartreeEvaluate1D(sys)
-
-    _, vh_mpo, _ = Quantics_TCI(
+    return diagonal_mpo_from_function(
         x -> evaluator(x),
         Float64,
         sys.sites,
         sys.params.tci_tol
     )
-    return vh_mpo
 end
 
 
@@ -78,8 +77,9 @@ function extract_fock_mpo_1d(sys::System)
     params = sys.params
     
 
+    iszero(params.U) && return zero_mpo(sites)
     fe = FockEvaluator1D(sys)
-    _, F_MPO, _ = Quantics_TCI(x -> fe(x), Float64, sites, params.tci_tol)
+    F_MPO = diagonal_mpo_from_function(x -> fe(x), Float64, sites, params.tci_tol)
     
     T_R, T_L = build_translation_chain(sites) 
     

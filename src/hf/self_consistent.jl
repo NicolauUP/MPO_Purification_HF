@@ -70,7 +70,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             vh_diff = +(vh_mpo, -sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
             diff_norm = sqrt(real(inner(vh_diff, vh_diff)))
             vh_norm = sqrt(real(inner(sys.VH, sys.VH)))
-            rel_change = diff_norm / vh_norm    
+            rel_change = safe_relative_change(diff_norm, vh_norm)
         end
         if verbose == :all
             println("  Relative Change in VH: $(rel_change * 100) %")
