@@ -73,4 +73,16 @@ end
         scf_max_iterations=40,
     )
     verify_interacting_scf_against_dense(staggered_seed)
+
+    opposite_seed = parameters_1d(
+        t=-0.7,
+        W=x -> (-0.2, 0.1, -0.05, 0.25)[Int(x) + 1],
+        U=0.6,
+        S=x -> iseven(Int(x)) ? -0.15 : 0.15,
+        purification_steps=35,
+        scf_mixing=0.3,
+        scf_tol=0.1,
+        scf_max_iterations=40,
+    )
+    verify_interacting_scf_against_dense(opposite_seed)
 end
