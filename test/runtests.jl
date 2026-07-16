@@ -14,3 +14,4 @@ end
 include("test_construction.jl")
 include("test_zero_safe.jl")
 include("test_basis_conventions.jl")
+include("test_hamiltonian_1d.jl")

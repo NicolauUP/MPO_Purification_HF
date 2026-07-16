@@ -63,6 +63,13 @@ function diagonal_mpo_from_function(
     sites::Vector{<:Index},
     tolerance::Float64,
 )
+    if length(sites) == 1
+        diagonal = OpSum()
+        diagonal += convert(eltype, f(0)), "P-", 1
+        diagonal += convert(eltype, f(1)), "P+", 1
+        return MPO(diagonal, sites)
+    end
+
     try
         _, mpo, _ = Quantics_TCI(f, eltype, sites, tolerance)
         return mpo

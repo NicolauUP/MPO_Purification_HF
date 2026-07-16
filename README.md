@@ -19,6 +19,11 @@ spinless lattice systems, using Matrix Product Operator (MPO) techniques.
 - In the historical translation names, `T_R[n,n+1]=1` and
   `T_L[n+1,n]=1`, so `T_L=T_R†`. Both are open-boundary shifts with no
   end-to-end wraparound.
+- For one-dimensional functional hopping, `t(x)` is attached to the bond from
+  zero-based site `x` to site `x+1`. A static potential `W(x)` is evaluated at
+  zero-based site `x`. Thus the implemented open-chain matrix has
+  `H0[x+1,x+2]=t(x)`, its Hermitian reverse bond, and
+  `H0[x+1,x+1]=W(x)` in Julia's one-based indexing.
 - Short-range (first-neighbor) hopping, Hubbard-like on-site interactions
 - Support for uniform or spatially modulated (quasiperiodic) hopping and static potential
 - Modulations specified as plain Julia functions — TCI conversion handled internally
