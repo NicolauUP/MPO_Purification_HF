@@ -15,6 +15,10 @@
     sys.rho = +(diagonal, rho_right, rho_left; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
     rho = dense_matrix(sys.rho, sys)
+    cached_right, cached_left = sys.translations
+    fresh_right, fresh_left = MPO_MeanField.build_translation_chain(sys.sites)
+    @test dense_matrix(cached_right, sys) == dense_matrix(fresh_right, sys)
+    @test dense_matrix(cached_left, sys) == dense_matrix(fresh_left, sys)
     vh = dense_matrix(extract_hartree_mpo_1d(sys), sys)
     vf = dense_matrix(extract_fock_mpo_1d(sys), sys)
     expected_vh = zeros(4, 4)

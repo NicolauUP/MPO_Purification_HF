@@ -109,8 +109,8 @@ end
 
 
 
-function build_H0(sites, params::Parameters1D)
-    T_R, T_L = build_translation_chain(sites)
+function build_H0(sites, params::Parameters1D; translations=nothing)
+    T_R, T_L = isnothing(translations) ? build_translation_chain(sites) : translations
  
 
     H0 = nothing
@@ -143,9 +143,9 @@ end
 
 
 
-function build_H0(sites, params::ParametersSquare)
+function build_H0(sites, params::ParametersSquare; translations=nothing)
     println("Building 2D Hamiltonian MPO...")
-    T_R, T_L, T_U, T_D = build_translation_square(sites)
+    T_R, T_L, T_U, T_D = isnothing(translations) ? build_translation_square(sites) : translations
  
 
     H0 = nothing
@@ -222,7 +222,7 @@ function build_fock(sys::System)
     
     # 2. Re-use your hopping MPO logic
     # T_R and T_L are the bare sum_{i} c†_{i+1}c_i and sum_{i} c†_i c_{i+1}
-    T_R, T_L = build_translation_chain(sites) # Assuming this helper exists
+    T_R, T_L = sys.translations
     
     # 3. Apply the spatial modulation (The "Fock Hopping")
     # This creates sum_i F(i) * c†_{i+1}c_i

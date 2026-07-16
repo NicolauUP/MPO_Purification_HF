@@ -44,6 +44,7 @@ mutable struct System{P}
     VF::MPO # Dynamic: Fock Potential
     ρ::MPO # Dynamic: Density Matrix
 
+    translations::Any # Immutable translation MPOs for this fixed basis
     bra_states::Any
     ket_states::Any
 end
@@ -100,7 +101,9 @@ function System(params::AbstractModelParameters)
     sites = ITensors.siteinds("Qubit", params.L)
     
 
-    H_static = build_H0(sites, params) #This should route to the correct function based on the type of params!
+    translations = params isa Parameters1D ?
+        build_translation_chain(sites) : build_translation_square(sites)
+    H_static = build_H0(sites, params; translations=translations)
     VH_init = build_seed(sites, params)
     VF_init = Identity_MPO(sites) * 0.0 # We start with no Fock potential, but we could also build a seed for it.
     rho_init = Identity_MPO(sites) * 0.0 #nothing
@@ -113,6 +116,7 @@ function System(params::AbstractModelParameters)
         VH_init,
         VF_init,
         rho_init,
+        translations,
         bra,
         ket
     )

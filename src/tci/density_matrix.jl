@@ -84,7 +84,7 @@ function extract_fock_mpo_1d(sys::System)
     fe = FockEvaluator1D(sys)
     F_MPO = diagonal_mpo_from_function(x -> fe(x), Float64, sites, params.tci_tol)
     
-    T_R, T_L = build_translation_chain(sites) 
+    T_R, T_L = sys.translations
     
 
     VF_R = apply(F_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
