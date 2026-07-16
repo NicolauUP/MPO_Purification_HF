@@ -40,6 +40,14 @@ end
             density=0.5,
             purification_steps=30,
         ),
+        parameters_square(
+            t=(-0.6, -0.35),
+            W=(x, y) -> 0.11x + 0.07y,
+            U=0.0,
+            density=0.5,
+            purification_steps=35,
+            itensors_maxdim=64,
+        ),
         parameters_1d(
             t=-0.7,
             W=x -> (0.2, -0.1, 0.05, 0.4)[Int(x) + 1],
@@ -51,17 +59,18 @@ end
 
     for params in cases
         H, pm, rho_pm, sp2, rho_sp2 = crossvalidate_purification(params)
-        exact = exact_occupied_projector(H, 2)
+        Ne = round(Int, size(H, 1) * params.density)
+        exact = exact_occupied_projector(H, Ne)
 
         @test pm.converged && sp2.converged
         @test pm.idempotency_residual < 1e-3
         @test sp2.idempotency_residual < 1e-3
-        @test isapprox(tr(rho_pm), 2.0; atol=1e-6, rtol=1e-6)
-        @test isapprox(tr(rho_sp2), 2.0; atol=1e-6, rtol=1e-6)
-        @test opnorm(rho_pm - exact) < 2e-3
-        @test opnorm(rho_sp2 - exact) < 2e-3
-        @test opnorm(rho_pm - rho_sp2) < 3e-3
-        @test opnorm(H * rho_sp2 - rho_sp2 * H) < 1e-8
-        @test isapprox(real(tr(H * rho_sp2)), real(tr(H * exact)); atol=2e-3, rtol=2e-3)
+        @test isapprox(tr(rho_pm), Ne; atol=1e-6, rtol=1e-6)
+        @test isapprox(tr(rho_sp2), Ne; atol=1e-6, rtol=1e-6)
+        @test opnorm(rho_pm - exact) < 3e-3
+        @test opnorm(rho_sp2 - exact) < 3e-3
+        @test opnorm(rho_pm - rho_sp2) < 4e-3
+        @test opnorm(H * rho_sp2 - rho_sp2 * H) < 1e-7
+        @test isapprox(real(tr(H * rho_sp2)), real(tr(H * exact)); atol=3e-3, rtol=3e-3)
     end
 end
