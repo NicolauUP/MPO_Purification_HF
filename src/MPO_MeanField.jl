@@ -21,5 +21,5 @@ include("../src/tci/density_matrix.jl")
 include("../src/hf/self_consistent.jl")
 include("../src/utils/observables.jl")
 
-export Parameters1D, ParametersSquare, System, PurificationResult, extract_hartree_mpo_1d, extract_fock_mpo_1d, run_scf!, MatrixChecker, construct_rho_0, perform_purification, perform_purification_sp2, build_translation_square, square_lattice_decoder, validate_spectral_bounds, verify_spectral_bounds_exact, nearest_neighbor_hf_energy_1d
+export Parameters1D, ParametersSquare, System, PurificationResult, extract_hartree_mpo_1d, extract_fock_mpo_1d, run_scf!, MatrixChecker, construct_rho_0, perform_purification, perform_purification_sp2, build_translation_square, square_lattice_decoder, validate_spectral_bounds, verify_spectral_bounds_exact, nearest_neighbor_hf_energy_1d, observables_1d
 end # module MPO_MeanField

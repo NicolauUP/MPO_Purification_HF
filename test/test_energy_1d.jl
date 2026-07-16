@@ -59,3 +59,30 @@ end
     vf = dense_matrix(extract_fock_mpo_1d(sys), sys)
     @test isapprox(finite_difference, real(tr((vh + vf) * direction)); atol=1e-8)
 end
+
+@testset "M6.2 1D observables and diagnostics" begin
+    params = parameters_1d(L=2, t=-0.6, U=0.7, W=nothing)
+    sys = System(params)
+    diagonal = [0.15, 0.40, 0.65, 0.25]
+    bonds = [0.03, -0.07, 0.11]
+    _set_real_tridiagonal_density!(sys, diagonal, bonds)
+    sys.VH = extract_hartree_mpo_1d(sys)
+    sys.VF = extract_fock_mpo_1d(sys)
+
+    observables = observables_1d(sys)
+    rho = dense_matrix(sys.ρ, sys)
+    h_effective = dense_matrix(+(sys.H0, sys.VH, sys.VF;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    ), sys)
+    expected_idempotency = norm(rho * rho - rho) / norm(rho)
+    expected_stationarity = norm(h_effective * rho - rho * h_effective) /
+        norm(h_effective * rho)
+
+    @test observables.site_density ≈ diagonal atol=1e-10
+    @test observables.bond_order ≈ ComplexF64.(bonds) atol=1e-10
+    @test isapprox(observables.particle_number, sum(diagonal); atol=1e-10)
+    @test observables.energy == nearest_neighbor_hf_energy_1d(sys)
+    @test observables.hermiticity_residual < 1e-10
+    @test isapprox(observables.idempotency_residual, expected_idempotency; atol=1e-10)
+    @test isapprox(observables.stationarity_residual, expected_stationarity; atol=1e-10)
+end
