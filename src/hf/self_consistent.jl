@@ -3,6 +3,8 @@
 function run_scf!(sys::System, H_min::Float64, H_max::Float64; 
     verbose::Symbol=:nothing,
     allow_unconverged_purification::Bool=false,
+    verify_spectral_bounds::Bool=false,
+    spectral_safety_margin::Float64=0.0,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -34,7 +36,12 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
         end
         # Step 1: Obtain density matrix!
-        ρ0_device = construct_rho_0(sys, params, H_min, H_max; to_gpu=to_gpu)
+        ρ0_device = construct_rho_0(
+            sys, params, H_min, H_max;
+            to_gpu=to_gpu,
+            verify_spectral_bounds=verify_spectral_bounds,
+            safety_margin=spectral_safety_margin,
+        )
         if verbose == :Density
             T1 = real(tr(ρ0_device))
             println("  Trace (Ne) of initial ρ0: $T1")
@@ -42,7 +49,12 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
         purification_verbose = verbose == :nothing ? 0 : 1
         purification = perform_purification(
-            ρ0_device, params; verbose=purification_verbose,
+            ρ0_device, params;
+            verbose=purification_verbose,
+            spectral_bounds=(H_min, H_max),
+            spectral_bounds_validation=(
+                verify_spectral_bounds ? :exact_small_system : :supplied_unverified
+            ),
         )
         if !purification.converged && !allow_unconverged_purification
             verbose != :nothing && println(

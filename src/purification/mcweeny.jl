@@ -1,12 +1,21 @@
 using CUDA
 """
-    construct_rho_0(sys, H, ϵ, maxχ, H_max, H_min, Ne)
+    construct_rho_0(sys, params, H_min, H_max; verify_spectral_bounds=false)
 
 Build the initial density matrix guess by linearly mapping the
-eigenvalues of H into [0,1] with the correct electron count Ne.
+effective Hamiltonian into [0,1] with the correct electron count. Bounds are
+user supplied. Setting `verify_spectral_bounds=true` performs an exact,
+small-system CPU validation before scaling.
 """
-function construct_rho_0(sys::System, params::AbstractModelParameters ,H_min::Float64, H_max::Float64;
-    to_gpu=identity)
+function construct_rho_0(
+    sys::System,
+    params::AbstractModelParameters,
+    H_min::Float64,
+    H_max::Float64;
+    to_gpu=identity,
+    verify_spectral_bounds::Bool=false,
+    safety_margin::Float64=0.0,
+)
     
     N = 2^length(sys.sites)
     Ne = round(Int, N * params.density)
@@ -15,8 +24,14 @@ function construct_rho_0(sys::System, params::AbstractModelParameters ,H_min::Fl
 
     H = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim) #Computes the MF-Hamiltonian
 
+    validate_spectral_bounds(H_min, H_max; safety_margin=safety_margin)
+    verify_spectral_bounds && verify_spectral_bounds_exact(
+        sys, H, H_min, H_max; safety_margin=safety_margin,
+    )
     μ = real(tr(H) / N) 
-    @assert H_max > μ > H_min "μ=$μ outside [H_min=$H_min, H_max=$H_max]" 
+    H_max > μ > H_min || throw(ArgumentError(
+        "mean energy μ=$μ lies outside supplied spectral bounds [$H_min, $H_max]",
+    ))
 
     λ = minimum((Ne / (H_max - μ), (N - Ne) / (μ - H_min)))
     coeff_I = (Ne + λ * μ) / N
@@ -60,7 +75,13 @@ function perform_purification(
     verbose::Int=1,
     io::IO=stdout,
     overwrite_progress::Bool=io isa Base.TTY,
+    spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
+    spectral_bounds_validation::Symbol=:not_provided,
 )
+
+    if !isnothing(spectral_bounds)
+        spectral_bounds = validate_spectral_bounds(spectral_bounds...)
+    end
 
     N = 2^params.L
     Ne = round(Int, N * params.density)
@@ -112,6 +133,8 @@ function perform_purification(
                 converged=false,
                 termination_reason=:trace_drift,
                 iterations=i,
+                spectral_bounds=spectral_bounds,
+                spectral_bounds_validation=spectral_bounds_validation,
             )
        end
        
@@ -133,6 +156,8 @@ function perform_purification(
                 converged=true,
                 termination_reason=:idempotency_threshold,
                 iterations=i,
+                spectral_bounds=spectral_bounds,
+                spectral_bounds_validation=spectral_bounds_validation,
             )
         end
         if use_mcweeny
@@ -175,6 +200,8 @@ function perform_purification(
         converged=false,
         termination_reason=:max_iterations,
         iterations=params.purification_steps,
+        spectral_bounds=spectral_bounds,
+        spectral_bounds_validation=spectral_bounds_validation,
     )
 end
 function perform_purification_grandcanonical(sys::System, params::AbstractModelParameters, H_min::Float64, H_max::Float64; verbose::Int=1, to_gpu=identity)

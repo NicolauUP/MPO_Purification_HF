@@ -19,6 +19,7 @@ end
     @test successful.hermiticity_residual <= 1e-12
     @test successful.final_bond_dimension == maxlinkdim(successful.rho)
     @test successful.spectral_bounds === nothing
+    @test successful.spectral_bounds_validation == :not_provided
     @test successful.truncation_cutoff == successful_params.itensors_tol
     @test successful.maxdim == successful_params.itensors_maxdim
 

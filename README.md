@@ -29,6 +29,16 @@ spinless lattice systems, using Matrix Product Operator (MPO) techniques.
   potential use zero-based coordinates: `t_x(x,y)` labels the bond to
   `(x+1,y)`, `t_y(x,y)` labels the bond to `(x,y+1)`, and `W(x,y)` labels the
   site `(x,y)`. Both directions have open boundaries.
+
+### Purification spectral bounds
+
+`H_min` and `H_max` are user-supplied bounds for the effective Hamiltonian and
+must enclose its full spectrum. The production workflow does not estimate them
+silently. `run_scf!(...; verify_spectral_bounds=true)` performs an exact CPU
+check after every field update for systems with at most 16 basis states; this
+is a validation tool, not a production diagonalization path. A positive
+`spectral_safety_margin` requires the supplied interval to extend beyond both
+exact endpoints by that amount.
 - Short-range (first-neighbor) hopping, Hubbard-like on-site interactions
 - Support for uniform or spatially modulated (quasiperiodic) hopping and static potential
 - Modulations specified as plain Julia functions — TCI conversion handled internally
