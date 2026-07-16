@@ -35,6 +35,9 @@ end
     @test result.trace_error <= 1e-6
     @test result.idempotency_residual < 1e-3
     @test result.hermiticity_residual <= 1e-10
+    @test result.work.squares == result.iterations
+    @test result.work.cubes == 0
+    @test result.work.max_bond_dimension >= result.final_bond_dimension
     @test opnorm(rho - exact) < 2e-3
 
     default_result = perform_purification(

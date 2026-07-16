@@ -50,10 +50,19 @@ function perform_purification_sp2(
     rho = rho0
     previous_idempotency = Inf
     stagnant_steps = 0
+    max_bond_dimension = maxlinkdim(rho)
+    bond_dimension_sum = 0
+    bond_dimension_samples = 0
 
     for iteration in 1:params.purification_steps
         rho_squared = apply(rho, rho;
             cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+        )
+        max_bond_dimension = max(max_bond_dimension, maxlinkdim(rho), maxlinkdim(rho_squared))
+        bond_dimension_sum += maxlinkdim(rho) + maxlinkdim(rho_squared)
+        bond_dimension_samples += 2
+        work = PurificationWorkStats(
+            iteration, 0, max_bond_dimension, bond_dimension_sum / bond_dimension_samples,
         )
         trace_value = real(tr(rho))
         trace_squared = real(tr(rho_squared))
@@ -87,6 +96,7 @@ function perform_purification_sp2(
                 iterations=iteration,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
+                work=work,
             )
         end
 
@@ -105,6 +115,7 @@ function perform_purification_sp2(
                 iterations=iteration,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
+                work=work,
             )
         end
         previous_idempotency = idem
@@ -129,5 +140,9 @@ function perform_purification_sp2(
         iterations=params.purification_steps,
         spectral_bounds=spectral_bounds,
         spectral_bounds_validation=spectral_bounds_validation,
+        work=PurificationWorkStats(
+            params.purification_steps, 0, max_bond_dimension,
+            bond_dimension_sum / max(1, bond_dimension_samples),
+        ),
     )
 end

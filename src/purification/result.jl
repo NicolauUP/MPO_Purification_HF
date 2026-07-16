@@ -4,6 +4,13 @@
 Diagnostics returned by a density-matrix purification backend. `spectral_bounds`
 is `nothing` when the backend was not given explicit bounds.
 """
+struct PurificationWorkStats
+    squares::Int
+    cubes::Int
+    max_bond_dimension::Int
+    mean_bond_dimension::Float64
+end
+
 struct PurificationResult{R}
     rho::R
     method::Symbol
@@ -20,6 +27,7 @@ struct PurificationResult{R}
     spectral_bounds_validation::Symbol
     truncation_cutoff::Float64
     maxdim::Int
+    work::PurificationWorkStats
 end
 
 function validate_spectral_bounds(H_min::Real, H_max::Real; safety_margin::Real=0.0)
@@ -102,6 +110,7 @@ function purification_result(
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
     target_particles::Union{Nothing,Real}=round(Int, 2^params.L * params.density),
+    work::PurificationWorkStats=PurificationWorkStats(0, 0, maxlinkdim(rho), Float64(maxlinkdim(rho))),
 )
     rho_squared = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     trace_value = Float64(real(tr(rho)))
@@ -124,5 +133,6 @@ function purification_result(
         spectral_bounds_validation,
         params.itensors_tol,
         params.itensors_maxdim,
+        work,
     )
 end

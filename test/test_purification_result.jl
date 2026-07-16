@@ -28,6 +28,10 @@ end
     @test successful.spectral_bounds_validation == :not_provided
     @test successful.truncation_cutoff == successful_params.itensors_tol
     @test successful.maxdim == successful_params.itensors_maxdim
+    @test successful.work.squares == successful.iterations
+    @test successful.work.cubes == successful.iterations
+    @test successful.work.max_bond_dimension >= successful.final_bond_dimension
+    @test successful.work.mean_bond_dimension >= 1
 
     limited_params = parameters_1d(U=0.0, purification_steps=1)
     _, limited_rho0 = purification_initial_state(limited_params)

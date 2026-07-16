@@ -38,6 +38,9 @@ function perform_purification_palser_manolopoulos(
     T2_old = 0.0
     idem_error = Inf
     idempotency_tolerance = 1e-3
+    max_bond_dimension = maxlinkdim(ρ0)
+    bond_dimension_sum = 0
+    bond_dimension_samples = 0
 
 
     for i in 1:params.purification_steps
@@ -51,6 +54,12 @@ function perform_purification_palser_manolopoulos(
         idem_error = idempotency_residual(ρ0, P2)
 
         P3 = apply(ρ0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        max_bond_dimension = max(max_bond_dimension, maxlinkdim(ρ0), maxlinkdim(P2), maxlinkdim(P3))
+        bond_dimension_sum += maxlinkdim(ρ0) + maxlinkdim(P2) + maxlinkdim(P3)
+        bond_dimension_samples += 3
+        work = PurificationWorkStats(
+            i, i, max_bond_dimension, bond_dimension_sum / bond_dimension_samples,
+        )
 
         if verbose > 0
             details = @sprintf(
@@ -82,6 +91,7 @@ function perform_purification_palser_manolopoulos(
                 iterations=i,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
+                work=work,
             )
        end
        
@@ -105,6 +115,7 @@ function perform_purification_palser_manolopoulos(
                 iterations=i,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
+                work=work,
             )
         end
         if use_mcweeny
@@ -152,5 +163,9 @@ function perform_purification_palser_manolopoulos(
         iterations=params.purification_steps,
         spectral_bounds=spectral_bounds,
         spectral_bounds_validation=spectral_bounds_validation,
+        work=PurificationWorkStats(
+            params.purification_steps, params.purification_steps, max_bond_dimension,
+            bond_dimension_sum / max(1, bond_dimension_samples),
+        ),
     )
 end
