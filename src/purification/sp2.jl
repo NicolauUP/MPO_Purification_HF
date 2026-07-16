@@ -1,38 +1,3 @@
-"""
-    _construct_rho_0_sp2(sys, params, H_min, H_max; verify_spectral_bounds=false)
-
-Construct the canonical SP2 starting matrix
-`X₀ = (H_max I - H_eff) / (H_max - H_min)`. The supplied bounds must enclose
-the effective-Hamiltonian spectrum, so that the initial spectrum lies in
-`[0, 1]`.
-"""
-function _construct_rho_0_sp2(
-    sys::System,
-    params::AbstractModelParameters,
-    H_min::Float64,
-    H_max::Float64;
-    to_gpu=identity,
-    verify_spectral_bounds::Bool=false,
-    safety_margin::Float64=0.0,
-)
-    Id = to_gpu(Identity_MPO(sys.sites))
-    H = +(sys.H0, sys.VH, sys.VF;
-        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
-    )
-
-    validate_spectral_bounds(H_min, H_max; safety_margin=safety_margin)
-    verify_spectral_bounds && verify_spectral_bounds_exact(
-        sys, H, H_min, H_max; safety_margin=safety_margin,
-    )
-    width = H_max - H_min
-    return +(
-        (H_max / width) * Id,
-        (-1.0 / width) * H;
-        cutoff=params.itensors_tol,
-        maxdim=params.itensors_maxdim,
-    )
-end
-
 function _sp2_trace_tolerance(params::AbstractModelParameters, Ne::Int)
     return max(10sqrt(eps(Float64)), 10params.itensors_tol) * max(1, Ne)
 end
