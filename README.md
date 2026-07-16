@@ -6,6 +6,19 @@ spinless lattice systems, using Matrix Product Operator (MPO) techniques.
 ## Physical Setup
 
 - Spinless fermions on a lattice with `2^L` sites in binary (qubit) representation
+
+### Basis and density-matrix conventions
+
+- Julia matrix indices `i,j` correspond to zero-based binary states `i-1,j-1`;
+  `MatrixChecker(M,i,j)` evaluates `⟨i-1|M|j-1⟩`.
+- MPO sites are ordered most-significant bit first: site `1` carries the highest
+  binary digit and site `L` the lowest.
+- The one-body density matrix is `ρ_ij = ⟨c_j† c_i⟩`. Consequently, diagonal
+  entries are site occupations; `i` is the matrix row and `j` is the matrix
+  column in the orientation returned by `MatrixChecker`.
+- In the historical translation names, `T_R[n,n+1]=1` and
+  `T_L[n+1,n]=1`, so `T_L=T_R†`. Both are open-boundary shifts with no
+  end-to-end wraparound.
 - Short-range (first-neighbor) hopping, Hubbard-like on-site interactions
 - Support for uniform or spatially modulated (quasiperiodic) hopping and static potential
 - Modulations specified as plain Julia functions — TCI conversion handled internally

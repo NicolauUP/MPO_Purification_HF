@@ -1,5 +1,14 @@
 # src/hamiltonian/mpo_construction.jl
 
+"""
+    build_translation_chain(sites)
+
+Return `(T_R, T_L)` in the historical package naming convention. In the
+integer basis decoded by [`MatrixChecker`](@ref), their matrix elements are
+`(T_R)[n, n+1] = 1` and `(T_L)[n+1, n] = 1`, with one-based matrix indices
+`n = 1:(2^L-1)`. Thus `T_L = T_R†`, and neither operator wraps between the
+two ends of the open chain.
+"""
 function build_translation_chain(sites)
     L = length(sites)
     T_R_opsum = OpSum()

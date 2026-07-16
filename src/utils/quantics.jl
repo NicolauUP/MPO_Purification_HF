@@ -16,6 +16,13 @@
         return bra_states, ket_states
     end
 
+    """
+        MatrixChecker(mpo, sites, i, j, bra_states, ket_states)
+
+    Return the one-based matrix element `⟨i-1|mpo|j-1⟩`. Binary basis
+    labels are decoded most-significant bit first: `sites[1]` carries the
+    highest-order bit and `sites[end]` the lowest-order bit.
+    """
     function MatrixChecker(mpo::MPO,sites::Vector{<:Index}, i::Int, j::Int, bra_states, ket_states)
         L = length(sites)
         
