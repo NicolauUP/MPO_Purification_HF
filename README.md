@@ -24,6 +24,11 @@ spinless lattice systems, using Matrix Product Operator (MPO) techniques.
   zero-based site `x`. Thus the implemented open-chain matrix has
   `H0[x+1,x+2]=t(x)`, its Hermitian reverse bond, and
   `H0[x+1,x+1]=W(x)` in Julia's one-based indexing.
+- For square systems, the binary index interleaves coordinate bits with `y`
+  in the even positions and `x` in the odd positions. Functional hopping and
+  potential use zero-based coordinates: `t_x(x,y)` labels the bond to
+  `(x+1,y)`, `t_y(x,y)` labels the bond to `(x,y+1)`, and `W(x,y)` labels the
+  site `(x,y)`. Both directions have open boundaries.
 - Short-range (first-neighbor) hopping, Hubbard-like on-site interactions
 - Support for uniform or spatially modulated (quasiperiodic) hopping and static potential
 - Modulations specified as plain Julia functions — TCI conversion handled internally

@@ -96,6 +96,16 @@ function build_W(sites, params)
     end
 end
 
+function build_W(sites, params::ParametersSquare)
+    isnothing(params.W) && return nothing
+    total_bits = length(sites)
+    potential_1d = z -> begin
+        x, y = square_lattice_decoder(Int(z), total_bits)
+        return params.W(x, y)
+    end
+    return diagonal_mpo_from_function(potential_1d, Float64, sites, params.tci_tol)
+end
+
 
 
 
