@@ -69,4 +69,4 @@ function benchmark_cleanup_policies(; repetitions=3)
     println("GPU peak memory is not reported: this harness is CPU-only.")
 end
 
-abspath(PROGRAM_FILE) == @__FILE__ && benchmark_cleanup_policies()
+benchmark_cleanup_policies()
