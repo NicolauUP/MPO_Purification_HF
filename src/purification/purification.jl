@@ -1,0 +1,41 @@
+"""
+    perform_purification(rho0, params; method=:palser_manolopoulos, ...)
+
+Select a purification backend. The legacy selector `:adaptive_pm_mcweeny` is
+accepted as an alias for `:palser_manolopoulos`.
+"""
+function perform_purification(
+    rho0::MPO,
+    params::AbstractModelParameters;
+    method::Symbol=:palser_manolopoulos,
+    verbose::Int=1,
+    io::IO=stdout,
+    overwrite_progress::Bool=io isa Base.TTY,
+    spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
+    spectral_bounds_validation::Symbol=:not_provided,
+    fermi_gap::Union{Nothing,Real}=nothing,
+)
+    if method == :sp2
+        return perform_purification_sp2(
+            rho0, params;
+            verbose=verbose,
+            io=io,
+            overwrite_progress=overwrite_progress,
+            spectral_bounds=spectral_bounds,
+            spectral_bounds_validation=spectral_bounds_validation,
+            fermi_gap=fermi_gap,
+        )
+    elseif method == :palser_manolopoulos || method == :adaptive_pm_mcweeny
+        return perform_purification_palser_manolopoulos(
+            rho0, params;
+            verbose=verbose,
+            io=io,
+            overwrite_progress=overwrite_progress,
+            spectral_bounds=spectral_bounds,
+            spectral_bounds_validation=spectral_bounds_validation,
+        )
+    end
+    throw(ArgumentError(
+        "unknown purification method $method; supported methods are :palser_manolopoulos, :sp2",
+    ))
+end

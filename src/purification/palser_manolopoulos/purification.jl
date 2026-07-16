@@ -1,7 +1,7 @@
 using CUDA
 
 """
-    perform_purification(ρ0; maxχ, ϵ, max_steps, verbose)
+    perform_purification_palser_manolopoulos(ρ0, params; verbose)
 
 Adaptive purification scheme. Starts with a trace-correcting linear update
 and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
@@ -10,7 +10,7 @@ Returns a [`PurificationResult`](@ref) containing the density matrix and
 termination diagnostics. The current adaptive PM/McWeeny stopping criterion
 is preserved unchanged.
 """
-function perform_purification(
+function perform_purification_palser_manolopoulos(
     ρ0::MPO,
     params::AbstractModelParameters;
     verbose::Int=1,
@@ -18,24 +18,7 @@ function perform_purification(
     overwrite_progress::Bool=io isa Base.TTY,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
-    method::Symbol=:adaptive_pm_mcweeny,
-    fermi_gap::Union{Nothing,Real}=nothing,
 )
-
-    if method == :sp2
-        return perform_purification_sp2(
-            ρ0, params;
-            verbose=verbose,
-            io=io,
-            overwrite_progress=overwrite_progress,
-            spectral_bounds=spectral_bounds,
-            spectral_bounds_validation=spectral_bounds_validation,
-            fermi_gap=fermi_gap,
-        )
-    end
-    method == :adaptive_pm_mcweeny || throw(ArgumentError(
-        "unknown purification method $method; supported methods are :adaptive_pm_mcweeny and :sp2",
-    ))
 
     if !isnothing(spectral_bounds)
         spectral_bounds = validate_spectral_bounds(spectral_bounds...)
