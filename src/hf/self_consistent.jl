@@ -19,6 +19,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:sp2,
     chemical_potential::Union{Nothing,Real}=nothing,
+    gc_policy::Symbol=:automatic,
+    gc_period::Integer=10,
+    gc_threshold_bytes::Integer=1 << 30,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -26,6 +29,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     sys.params isa ParametersSquare && throw(ArgumentError(
         "square-lattice SCF is unsupported: square Hartree/Fock field extraction is not implemented",
     ))
+    _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
 
 
     if verbose == :all
@@ -81,6 +85,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             ),
             method=purification_method,
             chemical_potential=chemical_potential,
+            gc_policy=gc_policy,
+            gc_period=gc_period,
+            gc_threshold_bytes=gc_threshold_bytes,
         )
         if !purification.converged && !allow_unconverged_purification
             verbose != :nothing && println(
@@ -144,9 +151,14 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
             sys.VF = +(sys.params.scf_mixing * vf_mpo, (1 - params.scf_mixing) * sys.VF; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
         end
-        # Optional cleanup to free GPU memory after each iteration
-        cleanup() # Default to a no-op, but can be set to a function that frees GPU memory if needed!
-        GC.gc(true) # Force garbage collection to free memory
+        # Optional external cleanup may reclaim device memory; host GC follows
+        # the explicit policy above instead of being forced every iteration.
+        cleanup()
+        maybe_collect_garbage!(iter;
+            gc_policy=gc_policy,
+            gc_period=gc_period,
+            gc_threshold_bytes=gc_threshold_bytes,
+        )
     end
     if !converged && verbose != :nothing
         println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final maximum residual: $(maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100) %\n")

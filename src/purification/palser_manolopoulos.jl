@@ -18,7 +18,12 @@ function perform_purification_palser_manolopoulos(
     overwrite_progress::Bool=io isa Base.TTY,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
+    gc_policy::Symbol=:automatic,
+    gc_period::Integer=10,
+    gc_threshold_bytes::Integer=1 << 30,
 )
+
+    _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
 
     if !isnothing(spectral_bounds)
         spectral_bounds = validate_spectral_bounds(spectral_bounds...)
@@ -124,8 +129,11 @@ function perform_purification_palser_manolopoulos(
         P2 = nothing
         P3 = nothing
         
-        # Force garbage collection
-        GC.gc()
+        maybe_collect_garbage!(i;
+            gc_policy=gc_policy,
+            gc_period=gc_period,
+            gc_threshold_bytes=gc_threshold_bytes,
+        )
         if CUDA.functional()
             CUDA.reclaim()  # Reclaim GPU memory if using CUDA
         end

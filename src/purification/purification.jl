@@ -14,6 +14,9 @@ function perform_purification(
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
     chemical_potential::Union{Nothing,Real}=nothing,
+    gc_policy::Symbol=:automatic,
+    gc_period::Integer=10,
+    gc_threshold_bytes::Integer=1 << 30,
 )
     if method == :sp2
         return perform_purification_sp2(
@@ -38,6 +41,9 @@ function perform_purification(
             overwrite_progress=overwrite_progress,
             spectral_bounds=spectral_bounds,
             spectral_bounds_validation=spectral_bounds_validation,
+            gc_policy=gc_policy,
+            gc_period=gc_period,
+            gc_threshold_bytes=gc_threshold_bytes,
         )
     end
     throw(ArgumentError(
