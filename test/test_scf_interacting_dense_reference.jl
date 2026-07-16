@@ -36,8 +36,9 @@ end
 function verify_interacting_scf_against_dense(params)
     sys = System(params)
     H0 = dense_matrix(sys.H0, sys)
+    Ne = round(Int, size(H0, 1) * params.density)
     rho_dense, vh_dense, vf_dense = dense_hf_1d(
-        H0, params.U, 2;
+        H0, params.U, Ne;
         mixing=params.scf_mixing,
         max_iterations=params.scf_max_iterations,
         initial_vh=dense_matrix(sys.VH, sys),
@@ -85,4 +86,19 @@ end
         scf_max_iterations=40,
     )
     verify_interacting_scf_against_dense(opposite_seed)
+
+    n8_case = parameters_1d(
+        L=3,
+        t=x -> x < 7 ? (-0.41, 0.18, -0.63, 0.29, -0.52, 0.07, 0.44)[Int(x) + 1] : 0.0,
+        W=x -> (0.13, -0.31, 0.22, -0.08, 0.37, -0.19, 0.05, 0.28)[Int(x) + 1],
+        U=0.2,
+        S=nothing,
+        density=3 / 8,
+        purification_steps=35,
+        itensors_maxdim=64,
+        scf_mixing=0.4,
+        scf_tol=0.1,
+        scf_max_iterations=40,
+    )
+    verify_interacting_scf_against_dense(n8_case)
 end
