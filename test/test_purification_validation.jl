@@ -16,10 +16,13 @@ function purify_static_system(sys; padding=0.5)
     H_dense = dense_matrix(H_eff, sys)
     bounds = exact_spectral_bounds(H_dense; padding=padding)
     rho0 = construct_rho_0(
-        sys, sys.params, bounds...; verify_spectral_bounds=true,
+        sys, sys.params, bounds...;
+        method=:palser_manolopoulos,
+        verify_spectral_bounds=true,
     )
     result = perform_purification(
         rho0, sys.params;
+        method=:palser_manolopoulos,
         verbose=0,
         spectral_bounds=bounds,
         spectral_bounds_validation=:exact_small_system,
@@ -139,10 +142,12 @@ end
     degenerate_bounds = exact_spectral_bounds(degenerate_H)
     degenerate_rho0 = construct_rho_0(
         degenerate_sys, degenerate_params, degenerate_bounds...;
+        method=:palser_manolopoulos,
         verify_spectral_bounds=true,
     )
     degenerate = @test_logs (:warn, r"Purification did not converge") perform_purification(
         degenerate_rho0, degenerate_params;
+        method=:palser_manolopoulos,
         verbose=0,
         spectral_bounds=degenerate_bounds,
         spectral_bounds_validation=:exact_small_system,
@@ -162,10 +167,12 @@ end
     near_degenerate_bounds = exact_spectral_bounds(near_degenerate_H)
     near_degenerate_rho0 = construct_rho_0(
         near_degenerate_sys, near_degenerate_params, near_degenerate_bounds...;
+        method=:palser_manolopoulos,
         verify_spectral_bounds=true,
     )
     near_degenerate = @test_logs (:warn, r"Purification did not converge") perform_purification(
         near_degenerate_rho0, near_degenerate_params;
+        method=:palser_manolopoulos,
         verbose=0,
         spectral_bounds=near_degenerate_bounds,
         spectral_bounds_validation=:exact_small_system,

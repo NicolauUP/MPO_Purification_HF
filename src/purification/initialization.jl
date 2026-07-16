@@ -1,10 +1,10 @@
 """
     construct_rho_0(sys, params, H_min, H_max;
-                    method=:palser_manolopoulos, verify_spectral_bounds=false)
+                    method=:sp2, verify_spectral_bounds=false)
 
 Build an initial density-matrix MPO from the effective Hamiltonian.
-`method=:palser_manolopoulos` uses the trace-correcting linear map, while
-`method=:sp2` uses the canonical SP2 spectral map. Bounds are user supplied.
+`method=:sp2` uses the canonical SP2 spectral map, while
+`:palser_manolopoulos` uses the trace-correcting linear map. Bounds are user supplied.
 Setting `verify_spectral_bounds=true` performs an exact, small-system CPU
 validation before scaling.
 """
@@ -16,7 +16,7 @@ function construct_rho_0(
     to_gpu=identity,
     verify_spectral_bounds::Bool=false,
     safety_margin::Float64=0.0,
-    method::Symbol=:palser_manolopoulos,
+    method::Symbol=:sp2,
     chemical_potential::Union{Nothing,Real}=nothing,
 )
     if method == :palser_manolopoulos || method == :adaptive_pm_mcweeny

@@ -1,13 +1,13 @@
 function purification_initial_state(params)
     sys = System(params)
-    rho0 = construct_rho_0(sys, params, -3.0, 3.0)
+    rho0 = construct_rho_0(sys, params, -3.0, 3.0; method=:palser_manolopoulos)
     return sys, rho0
 end
 
 @testset "M2.1 purification result contract" begin
     successful_params = parameters_1d(U=0.0, purification_steps=20)
     _, successful_rho0 = purification_initial_state(successful_params)
-    successful = perform_purification(successful_rho0, successful_params; verbose=0)
+    successful = perform_purification(successful_rho0, successful_params; method=:palser_manolopoulos, verbose=0)
 
     @test successful isa PurificationResult
     @test successful.method == :palser_manolopoulos
@@ -32,7 +32,7 @@ end
     limited_params = parameters_1d(U=0.0, purification_steps=1)
     _, limited_rho0 = purification_initial_state(limited_params)
     limited = @test_logs (:warn, r"Purification did not converge") perform_purification(
-        limited_rho0, limited_params; verbose=0,
+        limited_rho0, limited_params; method=:palser_manolopoulos, verbose=0,
     )
     @test !limited.converged
     @test limited.termination_reason == :max_iterations
@@ -41,7 +41,7 @@ end
     drift_params = parameters_1d(U=0.0)
     drift_sys = System(drift_params)
     drift = @test_logs (:warn, r"Trace has drifted") perform_purification(
-        Identity_MPO(drift_sys.sites), drift_params; verbose=0,
+        Identity_MPO(drift_sys.sites), drift_params; method=:palser_manolopoulos, verbose=0,
     )
     @test !drift.converged
     @test drift.termination_reason == :trace_drift
@@ -49,7 +49,7 @@ end
 
     refusing_sys, _ = purification_initial_state(limited_params)
     @test_logs (:warn, r"Purification did not converge") begin
-        @test !run_scf!(refusing_sys, -3.0, 3.0; verbose=:nothing)
+        @test !run_scf!(refusing_sys, -3.0, 3.0; purification_method=:palser_manolopoulos, verbose=:nothing)
     end
     @test norm(dense_matrix(refusing_sys.ρ, refusing_sys)) == 0.0
 
@@ -59,6 +59,7 @@ end
         @test !run_scf!(
             diagnostic_sys, -3.0, 3.0;
             verbose=:nothing,
+            purification_method=:palser_manolopoulos,
             allow_unconverged_purification=true,
         )
     end

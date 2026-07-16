@@ -41,6 +41,7 @@
 
     result = perform_purification(
         rho0, params;
+        method=:palser_manolopoulos,
         verbose=0,
         spectral_bounds=bounds,
         spectral_bounds_validation=:exact_small_system,
@@ -48,7 +49,7 @@
     @test result.spectral_bounds == bounds
     @test result.spectral_bounds_validation == :exact_small_system
     @test_throws ArgumentError perform_purification(
-        rho0, params; verbose=0, spectral_bounds=(1.0, 1.0),
+        rho0, params; method=:palser_manolopoulos, verbose=0, spectral_bounds=(1.0, 1.0),
     )
 
     scf_sys = System(parameters_1d(U=0.0, scf_max_iterations=3))
@@ -56,5 +57,6 @@
         scf_sys, bounds...;
         verbose=:nothing,
         verify_spectral_bounds=true,
+        purification_method=:palser_manolopoulos,
     )
 end

@@ -40,6 +40,15 @@ end
     @test result.hermiticity_residual <= 1e-10
     @test opnorm(rho - exact) < 2e-3
 
+    default_result = perform_purification(
+        rho0, params;
+        verbose=0,
+        spectral_bounds=bounds,
+        fermi_gap=1.2,
+    )
+    @test default_result.method == :sp2
+    @test default_result.converged
+
     scf_sys = System(params)
     @test run_scf!(
         scf_sys, bounds...;

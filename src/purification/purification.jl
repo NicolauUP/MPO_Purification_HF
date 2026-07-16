@@ -1,5 +1,5 @@
 """
-    perform_purification(rho0, params; method=:palser_manolopoulos, ...)
+    perform_purification(rho0, params; method=:sp2, ...)
 
 Select a purification backend. The legacy selector `:adaptive_pm_mcweeny` is
 accepted as an alias for `:palser_manolopoulos`.
@@ -7,7 +7,7 @@ accepted as an alias for `:palser_manolopoulos`.
 function perform_purification(
     rho0::MPO,
     params::AbstractModelParameters;
-    method::Symbol=:palser_manolopoulos,
+    method::Symbol=:sp2,
     verbose::Int=1,
     io::IO=stdout,
     overwrite_progress::Bool=io isa Base.TTY,
