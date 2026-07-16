@@ -28,7 +28,7 @@ function purify_static_system(sys; padding=0.5)
 end
 
 @testset "M2.3 adaptive purification validation" begin
-    diagonal_potential(x) = (-2.0, -0.5, 0.7, 2.0)[x + 1]
+    diagonal_potential(x) = (-2.0, -0.5, 0.7, 2.0)[Int(x) + 1]
     for Ne in 1:3
         params = parameters_1d(
             t=0.0,
@@ -79,7 +79,7 @@ end
 
     chain_params = parameters_1d(
         t=-0.7,
-        W=x -> (0.2, -0.1, 0.05, 0.4)[x + 1],
+        W=x -> (0.2, -0.1, 0.05, 0.4)[Int(x) + 1],
         U=0.0,
         density=0.5,
         purification_steps=30,
@@ -96,8 +96,8 @@ end
     random_potential = (0.13, -0.31, 0.22, -0.08, 0.37, -0.19, 0.05, 0.28)
     random_params = parameters_1d(
         L=3,
-        t=x -> x < 7 ? random_bonds[x + 1] : 0.0,
-        W=x -> random_potential[x + 1],
+        t=x -> x < 7 ? random_bonds[Int(x) + 1] : 0.0,
+        W=x -> random_potential[Int(x) + 1],
         U=0.0,
         density=3 / 8,
         purification_steps=35,
@@ -129,7 +129,7 @@ end
 
     degenerate_params = parameters_1d(
         t=0.0,
-        W=x -> (-1.0, 0.0, 0.0, 1.0)[x + 1],
+        W=x -> (-1.0, 0.0, 0.0, 1.0)[Int(x) + 1],
         U=0.0,
         density=0.5,
         purification_steps=20,
@@ -152,7 +152,7 @@ end
 
     near_degenerate_params = parameters_1d(
         t=0.0,
-        W=x -> (-1.0, -1e-3, 1e-3, 1.0)[x + 1],
+        W=x -> (-1.0, -1e-3, 1e-3, 1.0)[Int(x) + 1],
         U=0.0,
         density=0.5,
         purification_steps=10,
