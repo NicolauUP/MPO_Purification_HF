@@ -91,6 +91,7 @@ function perform_purification(
     use_mcweeny = false
     T2_old = 0.0
     idem_error = Inf
+    idempotency_tolerance = 1e-3
 
 
     for i in 1:params.purification_steps
@@ -101,7 +102,7 @@ function perform_purification(
         T2 = real(tr(P2))
         denom = T1 - T2 
 
-        idem_error = denom / T1 
+        idem_error = idempotency_residual(ρ0, P2)
 
         P3 = apply(ρ0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
@@ -147,7 +148,7 @@ function perform_purification(
             end
         end
 
-        if abs(denom)/T1*100 < 1e-1  #0.1# Error in the idempotency is small enough,  Stopping!
+        if idem_error < idempotency_tolerance
             verbose > 0 && finish_iteration_progress(io, overwrite_progress)
             verbose > 0 && println(io, "Purification converged at step $i.")
             return purification_result(
@@ -192,7 +193,7 @@ function perform_purification(
 
     verbose > 0 && finish_iteration_progress(io, overwrite_progress)
     @warn "Purification did not converge after $(params.purification_steps) steps. " *
-          "Final idempotency error: $idem_error. " *
+          "Final normalized idempotency residual: $idem_error. " *
           "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
     return purification_result(
         ρ0, params;

@@ -39,6 +39,10 @@ check after every field update for systems with at most 16 basis states; this
 is a validation tool, not a production diagonalization path. A positive
 `spectral_safety_margin` requires the supplied interval to extend beyond both
 exact endpoints by that amount.
+
+Purification declares convergence from the normalized MPO residual
+`||ρ²-ρ||/||ρ|| < 1e-3`; trace agreement is retained as a diagnostic and is
+not the authoritative projector test.
 - Short-range (first-neighbor) hopping, Hubbard-like on-site interactions
 - Support for uniform or spatially modulated (quasiperiodic) hopping and static potential
 - Modulations specified as plain Julia functions — TCI conversion handled internally

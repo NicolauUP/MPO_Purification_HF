@@ -81,6 +81,16 @@ function _relative_mpo_residual(A::MPO, B::MPO, params::AbstractModelParameters)
     return numerator / denominator
 end
 
+function idempotency_residual(rho::MPO, rho_squared::MPO)
+    rho_norm_squared = max(0.0, real(inner(rho, rho)))
+    difference_norm_squared = max(
+        0.0,
+        real(inner(rho_squared, rho_squared)) + rho_norm_squared -
+        2 * real(inner(rho_squared, rho)),
+    )
+    return sqrt(difference_norm_squared) / max(sqrt(rho_norm_squared), sqrt(eps(Float64)))
+end
+
 function purification_result(
     rho::MPO,
     params::AbstractModelParameters;
@@ -94,7 +104,7 @@ function purification_result(
     Ne = round(Int, 2^params.L * params.density)
     rho_squared = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     trace_value = Float64(real(tr(rho)))
-    idempotency_residual = _relative_mpo_residual(rho_squared, rho, params)
+    idem_residual = idempotency_residual(rho, rho_squared)
     hermiticity_residual = _relative_mpo_residual(rho, ITensors.dag(rho), params)
 
     return PurificationResult(
@@ -105,7 +115,7 @@ function purification_result(
         iterations,
         trace_value,
         abs(trace_value - Ne),
-        idempotency_residual,
+        idem_residual,
         hermiticity_residual,
         maxlinkdim(rho),
         spectral_bounds,
