@@ -1,4 +1,16 @@
+function _mpo_relative_change(candidate::MPO, reference::MPO, params::AbstractModelParameters)
+    difference = +(candidate, -reference; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    return safe_relative_change(
+        sqrt(max(0.0, real(inner(difference, difference)))),
+        sqrt(max(0.0, real(inner(reference, reference)))),
+    )
+end
 
+function _scf_commutator_residual(H::MPO, rho::MPO, params::AbstractModelParameters)
+    Hrho = apply(H, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    rhoH = apply(rho, H; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    return _mpo_relative_change(Hrho, rhoH, params)
+end
 
 function run_scf!(sys::System, H_min::Float64, H_max::Float64; 
     verbose::Symbol=:nothing,
@@ -36,7 +48,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     params = sys.params
 
     converged = false
-    rel_change = Inf
+    vh_residual = Inf
+    vf_residual = Inf
+    rho_residual = Inf
+    commutator_residual = Inf
     for iter in 1:params.scf_max_iterations
         if verbose != :nothing
             println("\n ----------- SCF Iteration $iter")
@@ -79,6 +94,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             T1_purified = real(tr(ρ_purified_device))
             println("  Trace (Ne) of purified ρ: $T1_purified")
         end
+        rho_previous = sys.ρ
         sys.ρ = to_cpu(ρ_purified_device) #Ok updates rho!
         #=
         Verify how this to_cpu should be done! 
@@ -99,21 +115,24 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
 
 
-        # Step 4: Check convergence        
+        # Step 4: Check convergence
+        H_effective = +(sys.H0, sys.VH, sys.VF;
+            cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+        )
+        commutator_residual = _scf_commutator_residual(H_effective, ρ_purified_device, params)
         if iter > 1
-            vh_diff = +(vh_mpo, -sys.VH; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-            diff_norm = sqrt(real(inner(vh_diff, vh_diff)))
-            vh_norm = sqrt(real(inner(sys.VH, sys.VH)))
-            rel_change = safe_relative_change(diff_norm, vh_norm)
+            vh_residual = _mpo_relative_change(vh_mpo, sys.VH, params)
+            vf_residual = _mpo_relative_change(vf_mpo, sys.VF, params)
+            rho_residual = _mpo_relative_change(sys.ρ, rho_previous, params)
         end
         if verbose == :all
-            println("  Relative Change in VH: $(rel_change * 100) %")
+            println("  Residuals (%): VH=$(vh_residual * 100), VF=$(vf_residual * 100), ρ=$(rho_residual * 100), [H,ρ]=$(commutator_residual * 100)")
         end
 
-        if iter > 1 && rel_change * 100 < params.scf_tol
+        if iter > 1 && maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100 < params.scf_tol
             converged = true
             if verbose == :all
-                println("\nSCF Converged in $iter iterations with relative change $(rel_change * 100) %\n")
+                println("\nSCF converged in $iter iterations.\n")
             end
             break
         end
@@ -130,7 +149,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         GC.gc(true) # Force garbage collection to free memory
     end
     if !converged && verbose != :nothing
-        println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final relative change: $(rel_change * 100) %\n")
+        println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final maximum residual: $(maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100) %\n")
     end
     return converged    
 
