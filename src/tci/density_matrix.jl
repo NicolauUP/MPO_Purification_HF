@@ -2,6 +2,7 @@
 export extract_hartree_mpo_1d
 struct HartreeEvaluate1D
     sys::System
+    density_cache::Dict{Int,Float64}
 end
 
 function (he::HartreeEvaluate1D)(i_float::Real)
@@ -14,14 +15,16 @@ function (he::HartreeEvaluate1D)(i_float::Real)
 
     for j in neighbors
         if 1 <= j <= 2^L
-            # OK, HERE I COULD ADD A CACHE! IF n_j already computed, save in a dictionary and reuse it. For now, i don't believe this is necessary.
-            n_j = MatrixChecker(he.sys.ρ, 
-                                he.sys.sites,
-                                 j,
-                                 j,
-                                 he.sys.bra_states,
-                                 he.sys.ket_states
-                                 )
+            n_j = get!(he.density_cache, j) do
+                real(MatrixChecker(
+                    he.sys.ρ,
+                    he.sys.sites,
+                    j,
+                    j,
+                    he.sys.bra_states,
+                    he.sys.ket_states,
+                ))
+            end
 
             v_hartree += n_j * he.sys.params.U 
         end
@@ -38,7 +41,7 @@ Runs TCI to generate the 1D Hartree MPO.
 
 function extract_hartree_mpo_1d(sys::System)
     iszero(sys.params.U) && return zero_mpo(sys.sites)
-    evaluator = HartreeEvaluate1D(sys)
+    evaluator = HartreeEvaluate1D(sys, Dict{Int,Float64}())
     return diagonal_mpo_from_function(
         x -> evaluator(x),
         Float64,

@@ -32,4 +32,9 @@
     @test opnorm(vf - expected_vf) < 1e-9
     @test opnorm(vh - vh') < 1e-12
     @test opnorm(vf - vf') < 1e-12
+
+    evaluator = MPO_MeanField.HartreeEvaluate1D(sys, Dict{Int,Float64}())
+    evaluator(0.0)
+    evaluator(1.0)
+    @test sort(collect(keys(evaluator.density_cache))) == [1, 2, 3]
 end
