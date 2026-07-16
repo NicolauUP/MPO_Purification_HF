@@ -1,12 +1,12 @@
 """
-    construct_rho_0_sp2(sys, params, H_min, H_max; verify_spectral_bounds=false)
+    _construct_rho_0_sp2(sys, params, H_min, H_max; verify_spectral_bounds=false)
 
 Construct the canonical SP2 starting matrix
 `X₀ = (H_max I - H_eff) / (H_max - H_min)`. The supplied bounds must enclose
 the effective-Hamiltonian spectrum, so that the initial spectrum lies in
 `[0, 1]`.
 """
-function construct_rho_0_sp2(
+function _construct_rho_0_sp2(
     sys::System,
     params::AbstractModelParameters,
     H_min::Float64,

@@ -9,8 +9,10 @@ function sp2_static_system()
     sys = System(params)
     H = dense_matrix(sys.H0, sys)
     bounds = exact_spectral_bounds(H; padding=0.5)
-    rho0 = construct_rho_0_sp2(
-        sys, params, bounds...; verify_spectral_bounds=true,
+    rho0 = construct_rho_0(
+        sys, params, bounds...;
+        method=:sp2,
+        verify_spectral_bounds=true,
     )
     return sys, params, H, bounds, rho0
 end

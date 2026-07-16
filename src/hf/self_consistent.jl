@@ -38,12 +38,12 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
         end
         # Step 1: Obtain density matrix!
-        constructor = purification_method == :sp2 ? construct_rho_0_sp2 : construct_rho_0
-        ρ0_device = constructor(
+        ρ0_device = construct_rho_0(
             sys, params, H_min, H_max;
             to_gpu=to_gpu,
             verify_spectral_bounds=verify_spectral_bounds,
             safety_margin=spectral_safety_margin,
+            method=purification_method,
         )
         if verbose == :Density
             T1 = real(tr(ρ0_device))

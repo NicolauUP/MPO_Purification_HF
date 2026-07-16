@@ -1,11 +1,13 @@
 using CUDA
 """
-    construct_rho_0(sys, params, H_min, H_max; verify_spectral_bounds=false)
+    construct_rho_0(sys, params, H_min, H_max;
+                    method=:adaptive_pm_mcweeny, verify_spectral_bounds=false)
 
 Build the initial density matrix guess by linearly mapping the
-effective Hamiltonian into [0,1] with the correct electron count. Bounds are
-user supplied. Setting `verify_spectral_bounds=true` performs an exact,
-small-system CPU validation before scaling.
+effective Hamiltonian into [0,1]. `method=:adaptive_pm_mcweeny` uses the
+existing trace-correcting map; `method=:sp2` uses the canonical SP2 spectral
+map. Bounds are user supplied. Setting `verify_spectral_bounds=true` performs
+an exact, small-system CPU validation before scaling.
 """
 function construct_rho_0(
     sys::System,
@@ -15,7 +17,19 @@ function construct_rho_0(
     to_gpu=identity,
     verify_spectral_bounds::Bool=false,
     safety_margin::Float64=0.0,
+    method::Symbol=:adaptive_pm_mcweeny,
 )
+    if method == :sp2
+        return _construct_rho_0_sp2(
+            sys, params, H_min, H_max;
+            to_gpu=to_gpu,
+            verify_spectral_bounds=verify_spectral_bounds,
+            safety_margin=safety_margin,
+        )
+    end
+    method == :adaptive_pm_mcweeny || throw(ArgumentError(
+        "unknown purification method $method; supported methods are :adaptive_pm_mcweeny and :sp2",
+    ))
     
     N = 2^length(sys.sites)
     Ne = round(Int, N * params.density)
