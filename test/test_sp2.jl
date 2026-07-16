@@ -53,6 +53,10 @@ end
         purification_method=:sp2,
     )
     @test opnorm(dense_matrix(scf_sys.ρ, scf_sys) - exact) < 2e-3
+    returned_hamiltonian = dense_matrix(scf_sys.H0, scf_sys) +
+        dense_matrix(scf_sys.VH, scf_sys) + dense_matrix(scf_sys.VF, scf_sys)
+    returned_rho = dense_matrix(scf_sys.ρ, scf_sys)
+    @test opnorm(returned_hamiltonian * returned_rho - returned_rho * returned_hamiltonian) < 1e-8
 
     @test_throws ArgumentError perform_purification(
         rho0, params; verbose=0, method=:sp2,

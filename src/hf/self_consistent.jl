@@ -110,22 +110,20 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             println("  Relative Change in VH: $(rel_change * 100) %")
         end
 
+        if iter > 1 && rel_change * 100 < params.scf_tol
+            converged = true
+            if verbose == :all
+                println("\nSCF Converged in $iter iterations with relative change $(rel_change * 100) %\n")
+            end
+            break
+        end
+
         if iter == 1
             sys.VH = vh_mpo
             sys.VF = vf_mpo
         else
             sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
             sys.VF = +(sys.params.scf_mixing * vf_mpo, (1 - params.scf_mixing) * sys.VF; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
-        end 
-
-        if iter > 1 && rel_change * 100 < params.scf_tol
-            converged = true
-            if verbose == :all
-                println("\nSCF Converged in $iter iterations with relative change $(rel_change * 100) %\n")
-            end
-            sys.VH = vh_mpo # Final update to ensure we return the most accurate VH
-            sys.VF = vf_mpo # Final update to ensure we return the most accurate VF
-            break
         end
         # Optional cleanup to free GPU memory after each iteration
         cleanup() # Default to a no-op, but can be set to a function that frees GPU memory if needed!
