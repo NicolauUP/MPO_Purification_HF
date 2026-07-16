@@ -39,7 +39,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             println("  Trace (Ne) of initial ρ0: $T1")
         end
 
-        ρ_purified_device = perform_purification(ρ0_device, params; verbose=1)
+        purification_verbose = verbose == :nothing ? 0 : 1
+        ρ_purified_device = perform_purification(
+            ρ0_device, params; verbose=purification_verbose,
+        )
 
         if verbose == :Density
             T1_purified = real(tr(ρ_purified_device))

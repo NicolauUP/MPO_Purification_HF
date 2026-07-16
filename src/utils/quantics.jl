@@ -88,6 +88,35 @@ function safe_relative_change(diff_norm::Real, reference_norm::Real; floor::Real
     return diff_norm / max(reference_norm, floor)
 end
 
+"""
+    print_iteration_progress(io, label, iteration, total, details; overwrite=io isa Base.TTY)
+
+Print a single iteration status. On an interactive terminal, the next status
+replaces this one; redirected output remains newline-delimited for logs.
+"""
+function print_iteration_progress(
+    io::IO,
+    label::AbstractString,
+    iteration::Integer,
+    total::Integer,
+    details::AbstractString;
+    overwrite::Bool=io isa Base.TTY,
+)
+    message = "$label $iteration/$total | $details"
+    if overwrite
+        print(io, "\r\e[2K", message)
+        flush(io)
+    else
+        println(io, message)
+    end
+    return overwrite
+end
+
+function finish_iteration_progress(io::IO, overwrite::Bool)
+    overwrite && println(io)
+    return nothing
+end
+
 
 
 """

@@ -53,11 +53,17 @@ and switches to McWeeny (3P² - 2P³) when idempotency error is small enough.
 Returns the purified density matrix ρ, or a partially purified ρ with a
 warning if convergence fails.
 """
-function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose::Int=1)
+function perform_purification(
+    ρ0::MPO,
+    params::AbstractModelParameters;
+    verbose::Int=1,
+    io::IO=stdout,
+    overwrite_progress::Bool=io isa Base.TTY,
+)
 
     N = 2^params.L
-    println("N = $N, density = $(params.density), Ne = $(round(Int, N * params.density))")
     Ne = round(Int, N * params.density)
+    verbose > 0 && println(io, "Purifying N=$N, density=$(params.density), Ne=$Ne")
  
     cn = nothing
     use_mcweeny = false
@@ -66,10 +72,6 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
 
 
     for i in 1:params.purification_steps
-        if verbose > 0
-            println("--- Step $i ---")
-        end
-
         P2 = apply(ρ0, ρ0; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
 
@@ -79,27 +81,29 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
 
         idem_error = denom / T1 
 
-        if verbose > 0
-            println("  Trace (Ne)           : $T1")
-            println("  Drift in Trace (%)  : $((T1 - Ne) / Ne * 100)")
-            println("  Rel Idempotency Error (%): $(idem_error * 100)")
-        end
-      
-
-
-
         P3 = apply(ρ0, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
         if verbose > 0
-            println(" χ_1: ", maxlinkdim(ρ0),"\n",
-                    " χ_2: ", maxlinkdim(P2),"\n",
-                    " χ_3: ", maxlinkdim(P3))
+            details = @sprintf(
+                "Tr=%.12g | drift=%+.3e%% | idem=%.3e%% | χ=(%d,%d,%d)",
+                T1,
+                (T1 - Ne) / Ne * 100,
+                idem_error * 100,
+                maxlinkdim(ρ0),
+                maxlinkdim(P2),
+                maxlinkdim(P3),
+            )
+            print_iteration_progress(
+                io, "Purification", i, params.purification_steps, details;
+                overwrite=overwrite_progress,
+            )
         end
 
         T3 = real(tr(P3))
         
 
        if abs(T1 - Ne) / Ne > 0.1/100
+            verbose > 0 && finish_iteration_progress(io, overwrite_progress)
             @warn "Trace has drifted: T1=$T1, Ne=$Ne. Stopping purification."
             return ρ0
        end
@@ -114,7 +118,8 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
         end
 
         if abs(denom)/T1*100 < 1e-1  #0.1# Error in the idempotency is small enough,  Stopping!
-            @info "T1 Similar to T2, converged!"
+            verbose > 0 && finish_iteration_progress(io, overwrite_progress)
+            verbose > 0 && println(io, "Purification converged at step $i.")
             return ρ0
         end
         if use_mcweeny
@@ -147,6 +152,7 @@ function perform_purification(ρ0::MPO, params::AbstractModelParameters;verbose:
 
     end
 
+    verbose > 0 && finish_iteration_progress(io, overwrite_progress)
     @warn "Purification did not converge after $(params.purification_steps) steps. " *
           "Final idempotency error: $idem_error. " *
           "Consider increasing max_steps or maxχ (current: $(params.itensors_maxdim))."
