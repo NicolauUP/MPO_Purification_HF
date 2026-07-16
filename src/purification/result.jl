@@ -11,7 +11,8 @@ struct PurificationResult{R}
     termination_reason::Symbol
     iterations::Int
     trace::Float64
-    trace_error::Float64
+    target_particles::Union{Nothing,Float64}
+    trace_error::Union{Nothing,Float64}
     idempotency_residual::Float64
     hermiticity_residual::Float64
     final_bond_dimension::Int
@@ -104,8 +105,8 @@ function purification_result(
     spectral_bounds_validation::Symbol=:not_provided,
     fermi_gap::Union{Nothing,Real}=nothing,
     degeneracy_policy::Symbol=:not_applicable,
+    target_particles::Union{Nothing,Real}=round(Int, 2^params.L * params.density),
 )
-    Ne = round(Int, 2^params.L * params.density)
     rho_squared = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     trace_value = Float64(real(tr(rho)))
     idem_residual = idempotency_residual(rho, rho_squared)
@@ -118,7 +119,8 @@ function purification_result(
         termination_reason,
         iterations,
         trace_value,
-        abs(trace_value - Ne),
+        isnothing(target_particles) ? nothing : Float64(target_particles),
+        isnothing(target_particles) ? nothing : abs(trace_value - target_particles),
         idem_residual,
         hermiticity_residual,
         maxlinkdim(rho),

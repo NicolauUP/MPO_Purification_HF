@@ -17,6 +17,7 @@ function construct_rho_0(
     verify_spectral_bounds::Bool=false,
     safety_margin::Float64=0.0,
     method::Symbol=:adaptive_pm_mcweeny,
+    chemical_potential::Union{Nothing,Real}=nothing,
 )
     if method == :adaptive_pm_mcweeny
         return _construct_rho_0_adaptive(
@@ -32,6 +33,9 @@ function construct_rho_0(
             verify_spectral_bounds=verify_spectral_bounds,
             safety_margin=safety_margin,
         )
+    elseif method == :mcweeny_mu
+        isnothing(chemical_potential) && throw(ArgumentError("method=:mcweeny_mu requires chemical_potential"))
+        return construct_rho_0_mcweeny(sys, params, chemical_potential, H_min, H_max; to_gpu=to_gpu)
     end
     throw(ArgumentError(
         "unknown purification method $method; supported methods are :adaptive_pm_mcweeny and :sp2",

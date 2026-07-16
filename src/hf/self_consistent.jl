@@ -7,6 +7,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:adaptive_pm_mcweeny,
     sp2_fermi_gap::Union{Nothing,Real}=nothing,
+    chemical_potential::Union{Nothing,Real}=nothing,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -44,6 +45,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             verify_spectral_bounds=verify_spectral_bounds,
             safety_margin=spectral_safety_margin,
             method=purification_method,
+            chemical_potential=chemical_potential,
         )
         if verbose == :Density
             T1 = real(tr(ρ0_device))
@@ -60,6 +62,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             ),
             method=purification_method,
             fermi_gap=sp2_fermi_gap,
+            chemical_potential=chemical_potential,
         )
         if !purification.converged && !allow_unconverged_purification
             verbose != :nothing && println(
