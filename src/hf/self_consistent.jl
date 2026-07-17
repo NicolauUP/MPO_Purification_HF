@@ -22,6 +22,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     gc_policy::Symbol=:automatic,
     gc_period::Integer=10,
     gc_threshold_bytes::Integer=1 << 30,
+    purification_cleanup::Function=() -> nothing,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -88,6 +89,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             gc_policy=gc_policy,
             gc_period=gc_period,
             gc_threshold_bytes=gc_threshold_bytes,
+            device_cleanup=purification_cleanup,
         )
         if !purification.converged && !allow_unconverged_purification
             verbose != :nothing && println(

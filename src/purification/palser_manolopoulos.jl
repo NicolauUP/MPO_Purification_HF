@@ -1,5 +1,3 @@
-using CUDA
-
 """
     perform_purification_palser_manolopoulos(ρ0, params; verbose)
 
@@ -21,6 +19,7 @@ function perform_purification_palser_manolopoulos(
     gc_policy::Symbol=:automatic,
     gc_period::Integer=10,
     gc_threshold_bytes::Integer=1 << 30,
+    device_cleanup::Function=() -> nothing,
 )
 
     _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
@@ -145,9 +144,7 @@ function perform_purification_palser_manolopoulos(
             gc_period=gc_period,
             gc_threshold_bytes=gc_threshold_bytes,
         )
-        if CUDA.functional()
-            CUDA.reclaim()  # Reclaim GPU memory if using CUDA
-        end
+        device_cleanup()
 
     end
 

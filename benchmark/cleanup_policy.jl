@@ -35,7 +35,15 @@ function median(values)
     return ordered[cld(length(ordered), 2)]
 end
 
-function benchmark_cleanup_policies(; repetitions=3)
+"""
+    benchmark_cleanup_policies(; repetitions=3, gpu_peak_memory_bytes=nothing)
+
+Run comparable CPU cleanup-policy measurements. If `gpu_peak_memory_bytes` is
+provided, it must return the device allocator's peak bytes observed so far;
+the benchmark records the maximum value returned after each repetition. This
+keeps GPU instrumentation opt-in and avoids loading CUDA on CPU-only runs.
+"""
+function benchmark_cleanup_policies(; repetitions=3, gpu_peak_memory_bytes=nothing)
     repetitions > 0 || throw(ArgumentError("repetitions must be positive"))
 
     # Compile the numerical path before collecting timings.
@@ -47,11 +55,13 @@ function benchmark_cleanup_policies(; repetitions=3)
         (:periodic, 2, 1 << 30),
         (:threshold, 10, threshold),
     )
-    println("policy       median_s   median_alloc_B  median_gc_s  live_heap_B  max_rss_B")
+    println("policy       median_s   median_alloc_B  median_gc_s  live_heap_B  rss_increase_B  process_peak_rss_B  gpu_peak_B")
     for (policy, period, threshold_bytes) in cases
         times = Float64[]
         allocations = Int[]
         gc_times = Float64[]
+        gpu_peaks = Int[]
+        rss_before = Sys.maxrss()
         for _ in 1:repetitions
             GC.gc(true)
             timing = @timed run_cleanup_benchmark_case(
@@ -60,13 +70,17 @@ function benchmark_cleanup_policies(; repetitions=3)
             push!(times, timing.time)
             push!(allocations, timing.bytes)
             push!(gc_times, timing.gctime)
+            !isnothing(gpu_peak_memory_bytes) && push!(gpu_peaks, gpu_peak_memory_bytes())
         end
-        @printf("%-12s %.6f   %14d  %.6f    %11d  %9d\n",
+        rss_after = Sys.maxrss()
+        gpu_peak = isnothing(gpu_peak_memory_bytes) ? "unavailable" : string(maximum(gpu_peaks))
+        @printf("%-12s %.6f   %14d  %.6f    %11d  %14d  %18d  %s\n",
             String(policy), median(times), median(allocations), median(gc_times),
-            Base.gc_live_bytes(), Sys.maxrss(),
+            Base.gc_live_bytes(), max(0, rss_after - rss_before), rss_after, gpu_peak,
         )
     end
-    println("GPU peak memory is not reported: this harness is CPU-only.")
 end
 
-benchmark_cleanup_policies()
+if abspath(PROGRAM_FILE) == @__FILE__
+    benchmark_cleanup_policies()
+end
