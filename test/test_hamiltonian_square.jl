@@ -55,6 +55,26 @@ end
     ]
     T_R, T_L, T_U, T_D = build_translation_square(sites)
 
+    @testset "P1.1 square geometry helpers" begin
+        for x in 0:3, y in 0:3
+            site = square_lattice_index(x, y, L)
+            @test site == square_site_index(x, y, L)
+            @test square_lattice_decoder(site - 1, L) == (x, y)
+            neighbours = square_neighbours(site, L)
+            @test neighbours.right == (x < 3 ? square_lattice_index(x + 1, y, L) : nothing)
+            @test neighbours.left == (x > 0 ? square_lattice_index(x - 1, y, L) : nothing)
+            @test neighbours.up == (y < 3 ? square_lattice_index(x, y + 1, L) : nothing)
+            @test neighbours.down == (y > 0 ? square_lattice_index(x, y - 1, L) : nothing)
+        end
+        bonds = square_undirected_bonds(L)
+        @test length(bonds) == 2 * 4 * 3
+        @test count(bond -> bond[3] == :horizontal, bonds) == 12
+        @test count(bond -> bond[3] == :vertical, bonds) == 12
+        @test length(unique(bonds)) == length(bonds)
+        @test_throws BoundsError square_lattice_index(4, 0, L)
+        @test_throws BoundsError square_neighbours(17, L)
+    end
+
     @test dense_translation(T_R) == dense_square_translation_reference(L, :right)
     @test dense_translation(T_L) == dense_square_translation_reference(L, :left)
     @test dense_translation(T_U) == dense_square_translation_reference(L, :up)

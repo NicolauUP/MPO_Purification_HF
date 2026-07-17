@@ -152,3 +152,71 @@ function square_lattice_decoder(i::Number, L::Integer)
     end
     return x, y
 end
+
+function _validate_square_lattice_bits(L::Integer)
+    L > 0 && iseven(L) || throw(ArgumentError(
+        "square lattice requires a positive even bit count, got L=$L",
+    ))
+    return nothing
+end
+
+"""
+    square_lattice_index(x, y, L)
+
+Return the one-based matrix/MPO index for the zero-based coordinate `(x, y)`
+on a `2^(L/2) × 2^(L/2)` open square lattice. This is the inverse of
+`square_lattice_decoder(index - 1, L)`.
+"""
+function square_lattice_index(x::Integer, y::Integer, L::Integer)
+    _validate_square_lattice_bits(L)
+    side = 2^div(L, 2)
+    0 <= x < side && 0 <= y < side || throw(BoundsError(
+        "coordinate ($x, $y) lies outside a $side × $side lattice",
+    ))
+    index = 0
+    for bit in 0:(div(L, 2) - 1)
+        index |= ((y >> bit) & 1) << (2bit)
+        index |= ((x >> bit) & 1) << (2bit + 1)
+    end
+    return index + 1
+end
+
+"""
+    square_neighbours(site, L)
+
+Return the one-based indices of the valid open-boundary cardinal neighbours
+of `site` as `(right, left, up, down)`. A missing boundary neighbour is
+`nothing`.
+"""
+function square_neighbours(site::Integer, L::Integer)
+    _validate_square_lattice_bits(L)
+    side = 2^div(L, 2)
+    N = side^2
+    1 <= site <= N || throw(BoundsError("site=$site lies outside 1:$N"))
+    x, y = square_lattice_decoder(site - 1, L)
+    return (
+        right=x < side - 1 ? square_lattice_index(x + 1, y, L) : nothing,
+        left=x > 0 ? square_lattice_index(x - 1, y, L) : nothing,
+        up=y < side - 1 ? square_lattice_index(x, y + 1, L) : nothing,
+        down=y > 0 ? square_lattice_index(x, y - 1, L) : nothing,
+    )
+end
+
+"""
+    square_undirected_bonds(L)
+
+Return every open-boundary nearest-neighbour bond once as
+`(site, neighbour, orientation)`, with `orientation` equal to `:horizontal`
+for a right-directed bond or `:vertical` for an up-directed bond.
+"""
+function square_undirected_bonds(L::Integer)
+    _validate_square_lattice_bits(L)
+    side = 2^div(L, 2)
+    bonds = Tuple{Int,Int,Symbol}[]
+    for x in 0:(side - 1), y in 0:(side - 1)
+        site = square_lattice_index(x, y, L)
+        x < side - 1 && push!(bonds, (site, square_lattice_index(x + 1, y, L), :horizontal))
+        y < side - 1 && push!(bonds, (site, square_lattice_index(x, y + 1, L), :vertical))
+    end
+    return bonds
+end
