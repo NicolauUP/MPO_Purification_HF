@@ -113,7 +113,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         =#
 
         # Step 2: Extract Hartree potential
-        vh_mpo_cpu, vf_mpo_cpu = extract_mean_fields(sys)
+        vh_mpo_cpu, vf_mpo_cpu, fock_components = _extract_mean_fields_with_components(sys)
 
         vh_mpo = to_gpu(vh_mpo_cpu)
         vf_mpo = to_gpu(vf_mpo_cpu)
@@ -132,6 +132,11 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         end
         if verbose == :all
             println("  Residuals (%): VH=$(vh_residual * 100), VF=$(vf_residual * 100), ρ=$(rho_residual * 100), [H,ρ]=$(commutator_residual * 100)")
+            if !isnothing(fock_components)
+                horizontal_norm = sqrt(max(0.0, real(inner(fock_components.horizontal, fock_components.horizontal))))
+                vertical_norm = sqrt(max(0.0, real(inner(fock_components.vertical, fock_components.vertical))))
+                println("  Square Fock norms: horizontal=$horizontal_norm, vertical=$vertical_norm")
+            end
         end
 
         if iter > 1 && maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100 < params.scf_tol

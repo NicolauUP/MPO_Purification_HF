@@ -2,6 +2,7 @@
     sys = System(parameters_square(U=0.3))
     sys.ρ = Identity_MPO(sys.sites) * 0.5
     vh, vf = extract_mean_fields(sys)
+    dispatched_vh, dispatched_vf, components = MPO_MeanField._extract_mean_fields_with_components(sys)
     expected_vh = extract_hartree_mpo_square(sys)
     expected_vf = +(
         extract_fock_mpo_square_horizontal(sys),
@@ -11,4 +12,9 @@
     )
     @test opnorm(dense_matrix(vh, sys) - dense_matrix(expected_vh, sys)) < 1e-12
     @test opnorm(dense_matrix(vf, sys) - dense_matrix(expected_vf, sys)) < 1e-12
+    @test opnorm(dense_matrix(dispatched_vh, sys) - dense_matrix(vh, sys)) < 1e-12
+    @test opnorm(dense_matrix(dispatched_vf, sys) - dense_matrix(vf, sys)) < 1e-12
+    @test opnorm(
+        dense_matrix(components.horizontal + components.vertical, sys) - dense_matrix(vf, sys),
+    ) < 1e-12
 end

@@ -239,18 +239,23 @@ Return `(VH, VF)` using the geometry-specific nearest-neighbour Hartree/Fock
 implementation for `sys`. Square `VF` is the sum of independently constructed
 horizontal and vertical exchange fields.
 """
-function extract_mean_fields(sys::System)
+function _extract_mean_fields_with_components(sys::System)
     if sys.params isa Parameters1D
-        return extract_hartree_mpo_1d(sys), extract_fock_mpo_1d(sys)
+        return extract_hartree_mpo_1d(sys), extract_fock_mpo_1d(sys), nothing
     elseif sys.params isa ParametersSquare
         horizontal = extract_fock_mpo_square_horizontal(sys)
         vertical = extract_fock_mpo_square_vertical(sys)
         fock = +(horizontal, vertical;
             cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
         )
-        return extract_hartree_mpo_square(sys), fock
+        return extract_hartree_mpo_square(sys), fock, (horizontal=horizontal, vertical=vertical)
     end
     throw(ArgumentError("no mean-field extractor for $(typeof(sys.params))"))
+end
+
+function extract_mean_fields(sys::System)
+    hartree, fock, _ = _extract_mean_fields_with_components(sys)
+    return hartree, fock
 end
 
 
