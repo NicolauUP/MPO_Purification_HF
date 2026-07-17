@@ -65,14 +65,19 @@ function benchmark_tensorial_hartree(; L=3, repetitions=1)
     # Warm compilation and establish field equivalence before timing.
     tci = extract_hartree_mpo_1d(sys)
     tensorial = extract_hartree_mpo_tensorial_1d(sys)
+    carry = extract_hartree_mpo_binary_carry_1d(sys)
     error_norm = opnorm(_benchmark_dense_matrix(tci, sys) - _benchmark_dense_matrix(tensorial, sys))
+    carry_error_norm = opnorm(_benchmark_dense_matrix(tci, sys) - _benchmark_dense_matrix(carry, sys))
 
     tci_times = Float64[]
     tensorial_times = Float64[]
+    carry_times = Float64[]
     tci_bytes = Int[]
     tensorial_bytes = Int[]
+    carry_bytes = Int[]
     tci_bond_dimensions = Int[]
     tensorial_bond_dimensions = Int[]
+    carry_bond_dimensions = Int[]
     for _ in 1:repetitions
         GC.gc(true)
         timed_tci = @timed extract_hartree_mpo_1d(sys)
@@ -85,17 +90,27 @@ function benchmark_tensorial_hartree(; L=3, repetitions=1)
         push!(tensorial_times, timed_tensorial.time)
         push!(tensorial_bytes, timed_tensorial.bytes)
         push!(tensorial_bond_dimensions, maxlinkdim(timed_tensorial.value))
+
+        GC.gc(true)
+        timed_carry = @timed extract_hartree_mpo_binary_carry_1d(sys)
+        push!(carry_times, timed_carry.time)
+        push!(carry_bytes, timed_carry.bytes)
+        push!(carry_bond_dimensions, maxlinkdim(timed_carry.value))
     end
     median(values) = sort(values)[cld(length(values), 2)]
     result = (
         L=L,
         field_error_opnorm=error_norm,
+        carry_field_error_opnorm=carry_error_norm,
         tci=(time_s=median(tci_times), bytes=median(tci_bytes), max_bond_dimension=median(tci_bond_dimensions)),
         tensorial=(time_s=median(tensorial_times), bytes=median(tensorial_bytes), max_bond_dimension=median(tensorial_bond_dimensions)),
+        carry=(time_s=median(carry_times), bytes=median(carry_bytes), max_bond_dimension=median(carry_bond_dimensions)),
     )
     @printf("L=%d | ||VH_tci-VH_tensorial||₂=%.3e\n", result.L, result.field_error_opnorm)
+    @printf("L=%d | ||VH_tci-VH_carry||₂=%.3e\n", result.L, result.carry_field_error_opnorm)
     @printf("TCI:       median_s=%.6f bytes=%d χ=%d\n", result.tci.time_s, result.tci.bytes, result.tci.max_bond_dimension)
     @printf("tensorial: median_s=%.6f bytes=%d χ=%d\n", result.tensorial.time_s, result.tensorial.bytes, result.tensorial.max_bond_dimension)
+    @printf("carry:      median_s=%.6f bytes=%d χ=%d\n", result.carry.time_s, result.carry.bytes, result.carry.max_bond_dimension)
     return result
 end
 
