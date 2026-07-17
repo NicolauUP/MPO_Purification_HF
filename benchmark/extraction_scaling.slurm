@@ -1,22 +1,28 @@
-#!/usr/bin/env bash
-# Adjust CPU, memory, wall-time, module setup, partition, and account for the
-# target cluster before submitting this file.
-#SBATCH --job-name=qtt-extraction
+#!/bin/bash
+#SBATCH --job-name=qtt_hf_benchmark
+#SBATCH --output=qtt_hf-%j.out
+#SBATCH --error=qtt_hf-%j.err
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=8
-#SBATCH --mem=64G
-#SBATCH --time=48:00:00
-#SBATCH --output=qtt_extraction_%j.out
-#SBATCH --error=qtt_extraction_%j.err
+#SBATCH --cpus-per-task=112
+#SBATCH --qos=gp_ehpc
+#SBATCH --account=epor78
+#SBATCH --time=24:00:00
 
 set -euo pipefail
 
-# Example site-specific setup:
-# module load julia
+module load julia
 
-cd "${SLURM_SUBMIT_DIR:?submit this job from the MPO_Purification_HF directory}"
-export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
+WORKING_DIR="${SLURM_SUBMIT_DIR:?submit this job from the MPO_Purification_HF directory}"
+cd "$WORKING_DIR"
 
-output_dir="benchmark_results/extraction_${SLURM_JOB_ID:-manual}"
-bash benchmark/run_extraction_scaling.sh "$output_dir"
+export JULIA_NUM_THREADS="$SLURM_CPUS_PER_TASK"
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+
+RUN_NAME="extraction_${SLURM_JOB_ID}"
+OUTPUT_DIR="${WORKING_DIR}/benchmark_results/${RUN_NAME}"
+
+mkdir -p "$OUTPUT_DIR"
+
+bash benchmark/run_extraction_scaling.sh "$OUTPUT_DIR"
