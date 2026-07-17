@@ -53,6 +53,58 @@ function nearest_neighbor_hf_energy_1d(sys::System)
 end
 
 raw"""
+    nearest_neighbor_hf_energy_square(sys)
+
+Return the components of the zero-temperature, open-square nearest-neighbour
+Hartree--Fock energy implemented by the current square field extractors:
+
+```math
+E = \mathrm{Tr}(H_0\rho)
+  + U\sum_{\langle ij\rangle}\left(n_i n_j -
+  [\operatorname{Re}\rho_{ij}]^2\right).
+```
+
+`square_undirected_bonds` supplies every horizontal and vertical physical bond
+once, so the explicit interaction sum has no factor of two. `H0` includes
+both hopping directions and the external potential `W`. The Fock contribution
+follows the presently implemented real-exchange convention and is not an
+energy functional for a complex exchange field.
+"""
+function nearest_neighbor_hf_energy_square(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "square nearest-neighbor HF energy requires ParametersSquare",
+    ))
+
+    params = sys.params
+    N = 2^params.L
+    density = Vector{Float64}(undef, N)
+    for site in 1:N
+        density[site] = real(MatrixChecker(
+            sys.ρ, sys.sites, site, site, sys.bra_states, sys.ket_states,
+        ))
+    end
+
+    hartree = 0.0
+    fock = 0.0
+    for (site, neighbour, _) in square_undirected_bonds(params.L)
+        bond_order = real(MatrixChecker(
+            sys.ρ, sys.sites, site, neighbour, sys.bra_states, sys.ket_states,
+        ))
+        hartree += params.U * density[site] * density[neighbour]
+        fock -= params.U * abs2(bond_order)
+    end
+    kinetic = real(tr(sys.H0 * sys.ρ))
+    interaction = hartree + fock
+    return (
+        kinetic=kinetic,
+        hartree=hartree,
+        fock=fock,
+        interaction=interaction,
+        total=kinetic + interaction,
+    )
+end
+
+raw"""
     observables_1d(sys)
 
 Return 1D open-chain observables and numerical diagnostics for the current
