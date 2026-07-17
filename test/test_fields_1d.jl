@@ -12,9 +12,9 @@
     T_R, T_L = MPO_MeanField.build_translation_chain(sys.sites)
     rho_right = apply(bond_diagonal, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     rho_left = apply(T_L, ITensors.dag(bond_diagonal); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-    sys.rho = +(diagonal, rho_right, rho_left; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    sys.ρ = +(diagonal, rho_right, rho_left; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 
-    rho = dense_matrix(sys.rho, sys)
+    rho = dense_matrix(sys.ρ, sys)
     cached_right, cached_left = sys.translations
     fresh_right, fresh_left = MPO_MeanField.build_translation_chain(sys.sites)
     @test dense_matrix(cached_right, sys) == dense_matrix(fresh_right, sys)
@@ -43,5 +43,8 @@
     @test sort(collect(keys(evaluator.density_cache))) == [1, 2, 3]
 
     tensorial_hartree = dense_matrix(extract_hartree_mpo_tensorial_1d(sys), sys)
-    @test tensorial_hartree ≈ hartree atol=1e-10
+    @test tensorial_hartree ≈ vh atol=1e-10
+
+    carry_hartree = dense_matrix(extract_hartree_mpo_binary_carry_1d(sys), sys)
+    @test carry_hartree ≈ vh atol=1e-10
 end

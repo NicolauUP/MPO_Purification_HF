@@ -41,7 +41,11 @@ function nearest_neighbor_hf_energy_1d(sys::System)
 
     hartree = params.U * sum(density[i] * density[i + 1] for i in 1:(N - 1))
     fock = -params.U * sum(abs2(bond_order[i]) for i in 1:(N - 1))
-    kinetic = real(tr(sys.H0 * sys.ρ))
+    H0rho = apply(sys.H0, sys.ρ;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    kinetic = real(tr(H0rho))
     interaction = hartree + fock
     return (
         kinetic=kinetic,
@@ -93,7 +97,11 @@ function nearest_neighbor_hf_energy_square(sys::System)
         hartree += params.U * density[site] * density[neighbour]
         fock -= params.U * abs2(bond_order)
     end
-    kinetic = real(tr(sys.H0 * sys.ρ))
+    H0rho = apply(sys.H0, sys.ρ;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    kinetic = real(tr(H0rho))
     interaction = hartree + fock
     return (
         kinetic=kinetic,

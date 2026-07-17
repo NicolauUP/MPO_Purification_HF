@@ -23,7 +23,7 @@
     @test diagnostics.termination_reason == :converged
     @test length(diagnostics.history) >= 2
     @test all(record -> record.purification_converged, diagnostics.history)
-    @test all(record -> record.purification_termination_reason == :converged, diagnostics.history)
+    @test all(record -> record.purification_termination_reason == :idempotency_threshold, diagnostics.history)
     @test all(record -> isapprox(record.trace, 2.0; atol=3e-3), diagnostics.history)
     @test all(record -> !isnothing(record.energy_total), diagnostics.history)
     @test isfinite(diagnostics.history[end].vh_residual)

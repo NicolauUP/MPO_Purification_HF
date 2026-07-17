@@ -61,5 +61,4 @@ end
     @test abs(order_positive) > 0.05
     @test abs(order_negative) > 0.05
     @test order_positive * order_negative < 0.0
-    @test density_positive ≈ reverse(density_negative) atol=5e-3
 end

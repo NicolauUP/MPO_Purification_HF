@@ -10,7 +10,7 @@ function _set_real_tridiagonal_density!(sys, diagonal, bonds)
     T_R, T_L = MPO_MeanField.build_translation_chain(sys.sites)
     rho_right = apply(bond_mpo, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     rho_left = apply(T_L, ITensors.dag(bond_mpo); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-    sys.rho = +(diagonal_mpo, rho_right, rho_left; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    sys.ρ = +(diagonal_mpo, rho_right, rho_left; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     return sys
 end
 
@@ -21,7 +21,7 @@ end
     bonds = [0.03, -0.07, 0.11]
     _set_real_tridiagonal_density!(sys, diagonal, bonds)
 
-    rho = dense_matrix(sys.rho, sys)
+    rho = dense_matrix(sys.ρ, sys)
     h0 = dense_matrix(sys.H0, sys)
     energy = nearest_neighbor_hf_energy_1d(sys)
     expected_hartree = params.U * sum(diagonal[i] * diagonal[i + 1] for i in 1:3)

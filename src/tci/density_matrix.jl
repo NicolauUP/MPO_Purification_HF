@@ -58,23 +58,43 @@ return the resulting diagonal MPO. The symmetrization preserves the current
 Hartree convention `real(rho[i,i])` when finite MPO truncation leaves a small
 anti-Hermitian diagonal component.
 """
+function _density_diagonal_qtt_tensors(rho::MPO, sites::Vector{<:Index})
+    tensors = Vector{ITensor}(undef, length(sites))
+    for site_number in eachindex(sites)
+        site = sites[site_number]
+        output_site = sim(site)
+        projected = rho[site_number] * delta(prime(site), site, output_site)
+        tensors[site_number] = replaceind(projected, output_site => site)
+    end
+    return tensors
+end
+
+function _diagonal_mpo_from_qtt_tensors(
+    tensors::Vector{ITensor},
+    sites::Vector{<:Index},
+    params::AbstractModelParameters;
+    symmetrize::Bool=true,
+)
+    diagonal = MPO(length(sites))
+    for site_number in eachindex(sites)
+        diagonal[site_number] = Quantics._asdiagonal(tensors[site_number], sites[site_number])
+    end
+    if symmetrize
+        return +(0.5 * diagonal, 0.5 * ITensors.dag(diagonal);
+            cutoff=params.itensors_tol,
+            maxdim=params.itensors_maxdim,
+        )
+    end
+    return diagonal
+end
+
 function _density_diagonal_mpo(
     rho::MPO,
     sites::Vector{<:Index},
     params::AbstractModelParameters,
 )
-    diagonal = MPO(length(sites))
-    for site_number in eachindex(sites)
-        site = sites[site_number]
-        output_site = sim(site)
-        projected = rho[site_number] * delta(prime(site), site, output_site)
-        projected = replaceind(projected, output_site => site)
-        diagonal[site_number] = Quantics._asdiagonal(projected, site)
-    end
-    return +(0.5 * diagonal, 0.5 * ITensors.dag(diagonal);
-        cutoff=params.itensors_tol,
-        maxdim=params.itensors_maxdim,
-    )
+    tensors = _density_diagonal_qtt_tensors(rho, sites)
+    return _diagonal_mpo_from_qtt_tensors(tensors, sites, params)
 end
 
 function _shift_diagonal_mpo(
@@ -90,6 +110,97 @@ function _shift_diagonal_mpo(
     return apply(shifted, backward;
         cutoff=params.itensors_tol,
         maxdim=params.itensors_maxdim,
+    )
+end
+
+function _binary_shift_transition(output_bit::Int, carry_in::Int, direction::Symbol)
+    if direction == :right
+        value = output_bit + carry_in
+        return value % 2, value ÷ 2
+    elseif direction == :left
+        value = output_bit - carry_in
+        return mod(value, 2), value < 0 ? 1 : 0
+    end
+    throw(ArgumentError("direction must be :right or :left, got $direction"))
+end
+
+"""
+    _shift_qtt_tensors_binary_carry(tensors, sites, direction)
+
+Apply the open-boundary binary shift `f(i) -> f(i+1)` (`:right`) or
+`f(i) -> f(i-1)` (`:left`) directly to QTT/MPS tensors. The carry enters at
+the least-significant bit and is fused into the existing QTT bond at every
+internal cut. No general translation-MPO product is formed.
+"""
+function _shift_qtt_tensors_binary_carry(
+    tensors::Vector{ITensor},
+    sites::Vector{<:Index},
+    direction::Symbol,
+)
+    length(tensors) == length(sites) || throw(ArgumentError(
+        "tensor and site counts must agree",
+    ))
+    L = length(sites)
+    carries = [Index(2, "HartreeCarry,link=$link") for link in 1:(L - 1)]
+    shifted = Vector{ITensor}(undef, L)
+
+    for site_number in 1:L
+        local_tensor = nothing
+        for output_bit in 0:1, carry_in in 0:1
+            input_bit, carry_out = _binary_shift_transition(
+                output_bit, carry_in, direction,
+            )
+            site_number == L && carry_in != 1 && continue
+            site_number == 1 && carry_out != 0 && continue
+
+            term = tensors[site_number] * onehot(sites[site_number] => input_bit + 1)
+            term *= onehot(sites[site_number] => output_bit + 1)
+            site_number > 1 && (term *= onehot(carries[site_number - 1] => carry_out + 1))
+            site_number < L && (term *= onehot(carries[site_number] => carry_in + 1))
+            local_tensor = isnothing(local_tensor) ? term : local_tensor + term
+        end
+        shifted[site_number] = local_tensor
+    end
+
+    for site_number in 1:(L - 1)
+        density_link = commonind(tensors[site_number], tensors[site_number + 1])
+        carry_link = carries[site_number]
+        fuse_links = combiner(density_link, carry_link)
+        shifted[site_number] *= fuse_links
+        shifted[site_number + 1] *= ITensors.dag(fuse_links)
+    end
+    return shifted
+end
+
+"""
+    extract_hartree_mpo_binary_carry_1d(sys)
+
+Experimental fused tensorial 1D Hartree extractor. It obtains the QTT density
+diagonal by local bra/ket contraction and applies binary increment/decrement
+carry transitions directly to those tensors. It avoids scalar TCI queries and
+the general MPO products used by `extract_hartree_mpo_tensorial_1d`.
+"""
+function extract_hartree_mpo_binary_carry_1d(sys::System)
+    sys.params isa Parameters1D || throw(ArgumentError(
+        "extract_hartree_mpo_binary_carry_1d requires Parameters1D",
+    ))
+    iszero(sys.params.U) && return zero_mpo(sys.sites)
+    density_tensors = _density_diagonal_qtt_tensors(sys.ρ, sys.sites)
+    right_tensors = _shift_qtt_tensors_binary_carry(density_tensors, sys.sites, :right)
+    left_tensors = _shift_qtt_tensors_binary_carry(density_tensors, sys.sites, :left)
+    right_density = _diagonal_mpo_from_qtt_tensors(
+        right_tensors, sys.sites, sys.params; symmetrize=false,
+    )
+    left_density = _diagonal_mpo_from_qtt_tensors(
+        left_tensors, sys.sites, sys.params; symmetrize=false,
+    )
+    hartree = +(sys.params.U * right_density, sys.params.U * left_density;
+        cutoff=sys.params.itensors_tol,
+        maxdim=sys.params.itensors_maxdim,
+    )
+    return +(0.5 * hartree, 0.5 * ITensors.dag(hartree);
+        cutoff=sys.params.itensors_tol,
+        maxdim=sys.params.itensors_maxdim,
     )
 end
 
