@@ -136,5 +136,53 @@ function extract_fock_mpo_1d(sys::System)
     return +(VF_R, VF_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
 end
 
+struct HorizontalFockEvaluatorSquare
+    sys::System
+end
+
+function (evaluator::HorizontalFockEvaluatorSquare)(coordinate::Real)
+    site = Int(coordinate) + 1
+    right = square_neighbours(site, evaluator.sys.params.L).right
+    isnothing(right) && return 0.0
+    bond_order = MatrixChecker(
+        evaluator.sys.ρ,
+        evaluator.sys.sites,
+        site,
+        right,
+        evaluator.sys.bra_states,
+        evaluator.sys.ket_states,
+    )
+    return -evaluator.sys.params.U * real(bond_order)
+end
+
+"""
+    extract_fock_mpo_square_horizontal(sys)
+
+Construct the real-exchange Fock field on right-directed open-square bonds.
+For every horizontal bond `i -> j`, its coefficient is
+`-U * real(rho[i,j])`, and the returned MPO includes the Hermitian conjugate
+left-directed term. Vertical exchange is intentionally not included here.
+"""
+function extract_fock_mpo_square_horizontal(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_fock_mpo_square_horizontal requires ParametersSquare",
+    ))
+    iszero(sys.params.U) && return zero_mpo(sys.sites)
+    evaluator = HorizontalFockEvaluatorSquare(sys)
+    coefficients = diagonal_mpo_from_function(
+        x -> evaluator(x), Float64, sys.sites, sys.params.tci_tol,
+    )
+    T_R, T_L, _, _ = sys.translations
+    right_term = apply(coefficients, T_R;
+        cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
+    )
+    left_term = apply(T_L, ITensors.dag(coefficients);
+        cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
+    )
+    return +(right_term, left_term;
+        cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
+    )
+end
+
 
     
