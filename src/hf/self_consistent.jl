@@ -12,6 +12,15 @@ function _scf_commutator_residual(H::MPO, rho::MPO, params::AbstractModelParamet
     return _mpo_relative_change(Hrho, rhoH, params)
 end
 
+function _scf_energy_total(sys::System)
+    if sys.params isa Parameters1D
+        return nearest_neighbor_hf_energy_1d(sys).total
+    elseif sys.params isa ParametersSquare
+        return nearest_neighbor_hf_energy_square(sys).total
+    end
+    return nothing
+end
+
 function run_scf!(sys::System, H_min::Float64, H_max::Float64; 
     verbose::Symbol=:nothing,
     allow_unconverged_purification::Bool=false,
@@ -23,6 +32,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     gc_period::Integer=10,
     gc_threshold_bytes::Integer=1 << 30,
     purification_cleanup::Function=() -> nothing,
+    record_energy::Bool=false,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -50,6 +60,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     params = sys.params
 
     converged = false
+    termination_reason = :max_iterations
+    history = SCFIterationRecord[]
+    sys.scf_diagnostics = SCFDiagnostics(history, false, :running)
     vh_residual = Inf
     vf_residual = Inf
     rho_residual = Inf
@@ -89,6 +102,19 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             device_cleanup=purification_cleanup,
         )
         if !purification.converged && !allow_unconverged_purification
+            push!(history, SCFIterationRecord(
+                iter,
+                purification.trace,
+                vh_residual,
+                vf_residual,
+                rho_residual,
+                commutator_residual,
+                false,
+                purification.termination_reason,
+                purification.iterations,
+                nothing,
+            ))
+            sys.scf_diagnostics = SCFDiagnostics(history, false, :purification_failed)
             verbose != :nothing && println(
                 "SCF stopped: purification ended with $(purification.termination_reason).",
             )
@@ -130,6 +156,19 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             vf_residual = _mpo_relative_change(vf_mpo, sys.VF, params)
             rho_residual = _mpo_relative_change(sys.ρ, rho_previous, params)
         end
+        energy_total = record_energy ? _scf_energy_total(sys) : nothing
+        push!(history, SCFIterationRecord(
+            iter,
+            purification.trace,
+            vh_residual,
+            vf_residual,
+            rho_residual,
+            commutator_residual,
+            purification.converged,
+            purification.termination_reason,
+            purification.iterations,
+            energy_total,
+        ))
         if verbose == :all
             println("  Residuals (%): VH=$(vh_residual * 100), VF=$(vf_residual * 100), ρ=$(rho_residual * 100), [H,ρ]=$(commutator_residual * 100)")
             if !isnothing(fock_components)
@@ -141,6 +180,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
         if iter > 1 && maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100 < params.scf_tol
             converged = true
+            termination_reason = :converged
             if verbose == :all
                 println("\nSCF converged in $iter iterations.\n")
             end
@@ -166,6 +206,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     if !converged && verbose != :nothing
         println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final maximum residual: $(maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100) %\n")
     end
+    sys.scf_diagnostics = SCFDiagnostics(history, converged, termination_reason)
     return converged    
 
 end

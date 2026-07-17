@@ -35,6 +35,27 @@ Base.@kwdef struct ParametersSquare{Tt<:Tuple, Tu, Tw, Ts} <: AbstractModelParam
     scf_max_iterations::Int
 end
 
+"""A compact scalar record from one SCF iteration; it deliberately stores no MPOs."""
+struct SCFIterationRecord
+    iteration::Int
+    trace::Float64
+    vh_residual::Float64
+    vf_residual::Float64
+    rho_residual::Float64
+    commutator_residual::Float64
+    purification_converged::Bool
+    purification_termination_reason::Symbol
+    purification_iterations::Int
+    energy_total::Union{Nothing,Float64}
+end
+
+"""Final status and compact scalar history from the most recent `run_scf!` call."""
+struct SCFDiagnostics
+    history::Vector{SCFIterationRecord}
+    converged::Bool
+    termination_reason::Symbol
+end
+
 
 mutable struct System{P}
     params::P
@@ -47,6 +68,7 @@ mutable struct System{P}
     translations::Any # Immutable translation MPOs for this fixed basis
     bra_states::Any
     ket_states::Any
+    scf_diagnostics::SCFDiagnostics
 end
 
 function _validate_common_parameters(params::AbstractModelParameters)
@@ -108,6 +130,7 @@ function System(params::AbstractModelParameters)
     VF_init = Identity_MPO(sites) * 0.0 # We start with no Fock potential, but we could also build a seed for it.
     rho_init = Identity_MPO(sites) * 0.0 #nothing
     bra, ket = precompute_qtt_states(sites)
+    diagnostics = SCFDiagnostics(SCFIterationRecord[], false, :not_run)
     
     return System{typeof(params)}(
         params,
@@ -118,9 +141,13 @@ function System(params::AbstractModelParameters)
         rho_init,
         translations,
         bra,
-        ket
+        ket,
+        diagnostics,
     )
 end
+
+"""Return diagnostics from the most recent call to `run_scf!` on `sys`."""
+scf_diagnostics(sys::System) = sys.scf_diagnostics
 
 function Base.show(io::IO, sys::System)
     println(io, "System (L=$(sys.params.L))")
