@@ -157,3 +157,76 @@ function observables_1d(sys::System)
         stationarity_residual=_scf_commutator_residual(H_effective, sys.ρ, params),
     )
 end
+
+raw"""
+    observables_square(sys)
+
+Return open-square observables and numerical diagnostics for the current
+state. `horizontal_bonds` and `vertical_bonds` are one-based, undirected site
+pairs; their respective complex bond-order vectors have the same ordering.
+Together with `site_density`, `particle_number`, `energy`, and the three
+residuals, these use the same physical conventions as [`observables_1d`](@ref).
+"""
+function observables_square(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "square observables require ParametersSquare",
+    ))
+
+    params = sys.params
+    N = 2^params.L
+    site_density = Vector{Float64}(undef, N)
+    for site in 1:N
+        site_density[site] = real(MatrixChecker(
+            sys.ρ, sys.sites, site, site, sys.bra_states, sys.ket_states,
+        ))
+    end
+
+    horizontal_bonds = Tuple{Int,Int}[]
+    vertical_bonds = Tuple{Int,Int}[]
+    horizontal_bond_order = ComplexF64[]
+    vertical_bond_order = ComplexF64[]
+    for (site, neighbour, orientation) in square_undirected_bonds(params.L)
+        bond_order = MatrixChecker(
+            sys.ρ, sys.sites, site, neighbour, sys.bra_states, sys.ket_states,
+        )
+        if orientation == :horizontal
+            push!(horizontal_bonds, (site, neighbour))
+            push!(horizontal_bond_order, bond_order)
+        else
+            @assert orientation == :vertical
+            push!(vertical_bonds, (site, neighbour))
+            push!(vertical_bond_order, bond_order)
+        end
+    end
+
+    rho_squared = apply(sys.ρ, sys.ρ; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    H_effective = +(sys.H0, sys.VH, sys.VF;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    return (
+        site_density=site_density,
+        horizontal_bonds=horizontal_bonds,
+        vertical_bonds=vertical_bonds,
+        horizontal_bond_order=horizontal_bond_order,
+        vertical_bond_order=vertical_bond_order,
+        particle_number=real(tr(sys.ρ)),
+        energy=nearest_neighbor_hf_energy_square(sys),
+        hermiticity_residual=_relative_mpo_residual(sys.ρ, ITensors.dag(sys.ρ), params),
+        idempotency_residual=idempotency_residual(sys.ρ, rho_squared),
+        stationarity_residual=_scf_commutator_residual(H_effective, sys.ρ, params),
+    )
+end
+
+"""
+    observables(sys)
+
+Return the geometry-appropriate observable result for a 1D or square system.
+"""
+function observables(sys::System)
+    if sys.params isa Parameters1D
+        return observables_1d(sys)
+    elseif sys.params isa ParametersSquare
+        return observables_square(sys)
+    end
+    throw(ArgumentError("observables are not implemented for $(typeof(sys.params))"))
+end

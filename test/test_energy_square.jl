@@ -62,3 +62,42 @@ end
     ), sys)
     @test isapprox(energy.interaction, real(tr(mean_field * rho)) / 2; atol=1e-10)
 end
+
+@testset "P3.3 square observables" begin
+    params = parameters_square(L=4, t=(-0.6, -0.35), U=0.7, W=nothing, S=nothing)
+    sys = System(params)
+    diagonal = [0.12 + 0.015 * site for site in 1:16]
+    horizontal = [0.01 * (1 + site) for site in 1:16]
+    vertical = [-0.008 * (1 + site) for site in 1:16]
+    _set_real_square_density!(sys, diagonal, horizontal, vertical)
+    sys.VH, sys.VF = extract_mean_fields(sys)
+
+    result = observables_square(sys)
+    generic_result = observables(sys)
+    rho = dense_matrix(sys.ρ, sys)
+    h_effective = dense_matrix(+(sys.H0, sys.VH, sys.VF;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    ), sys)
+    expected_horizontal = Tuple{Int,Int}[]
+    expected_vertical = Tuple{Int,Int}[]
+    for (site, neighbour, orientation) in square_undirected_bonds(params.L)
+        if orientation == :horizontal
+            push!(expected_horizontal, (site, neighbour))
+        else
+            @test orientation == :vertical
+            push!(expected_vertical, (site, neighbour))
+        end
+    end
+
+    @test result.site_density ≈ diagonal atol=1e-10
+    @test result.horizontal_bonds == expected_horizontal
+    @test result.vertical_bonds == expected_vertical
+    @test result.horizontal_bond_order ≈ [rho[site, neighbour] for (site, neighbour) in expected_horizontal] atol=1e-10
+    @test result.vertical_bond_order ≈ [rho[site, neighbour] for (site, neighbour) in expected_vertical] atol=1e-10
+    @test isapprox(result.particle_number, sum(diagonal); atol=1e-10)
+    @test result.energy == nearest_neighbor_hf_energy_square(sys)
+    @test generic_result == result
+    @test result.hermiticity_residual < 1e-10
+    @test isapprox(result.idempotency_residual, norm(rho * rho - rho) / norm(rho); atol=1e-10)
+    @test isapprox(result.stationarity_residual, norm(h_effective * rho - rho * h_effective) / norm(h_effective * rho); atol=1e-10)
+end
