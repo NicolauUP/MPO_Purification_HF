@@ -63,6 +63,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     stable_iterations::Integer=2,
     detect_two_cycles::Bool=true,
     two_cycle_tolerance::Union{Nothing,Real}=nothing,
+    io::IO=stdout,
+    overwrite_progress::Bool=io isa Base.TTY,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
@@ -72,15 +74,15 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
 
     if verbose == :all
-        println("Starting SCF iterations with parameters:")
-        println("  Max Iterations: $(sys.params.scf_max_iterations)")
-        println("  Convergence Tolerance: $(sys.params.scf_tol)")
-        println("  Mixing Parameter: $(sys.params.scf_mixing)")
+        println(io, "Starting SCF iterations with parameters:")
+        println(io, "  Max Iterations: $(sys.params.scf_max_iterations)")
+        println(io, "  Convergence Tolerance: $(sys.params.scf_tol)")
+        println(io, "  Mixing Parameter: $(sys.params.scf_mixing)")
     elseif verbose == :Density
-        println("Starting SCF iterations with parameters:")
-        println("  Max Iterations: $(sys.params.scf_max_iterations)")
-        println("  Convergence Tolerance: $(sys.params.scf_tol)")
-        println("  Mixing Parameter: $(sys.params.scf_mixing)")
+        println(io, "Starting SCF iterations with parameters:")
+        println(io, "  Max Iterations: $(sys.params.scf_max_iterations)")
+        println(io, "  Convergence Tolerance: $(sys.params.scf_tol)")
+        println(io, "  Mixing Parameter: $(sys.params.scf_mixing)")
     end
 
     sys.H0 = to_gpu(sys.H0)
@@ -104,11 +106,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     rho_residual = Inf
     commutator_residual = Inf
     rho_two_steps_ago = nothing
+    overwrote_scf_progress = false
     for iter in 1:params.scf_max_iterations
-        if verbose != :nothing
-            println("\n ----------- SCF Iteration $iter")
-
-        end
         # Step 1: Obtain density matrix!
         ρ0_device = construct_rho_0(
             sys, params, H_min, H_max;
@@ -118,11 +117,6 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             method=purification_method,
             chemical_potential=chemical_potential,
         )
-        if verbose == :Density
-            T1 = real(tr(ρ0_device))
-            println("  Trace (Ne) of initial ρ0: $T1")
-        end
-
         purification_verbose = verbose == :nothing ? 0 : 1
         purification = perform_purification(
             ρ0_device, params;
@@ -137,6 +131,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             gc_period=gc_period,
             gc_threshold_bytes=gc_threshold_bytes,
             device_cleanup=purification_cleanup,
+            io=io,
+            overwrite_progress=overwrite_progress,
         )
         if !purification.converged && !allow_unconverged_purification
             push!(history, SCFIterationRecord(
@@ -153,17 +149,14 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 nothing,
             ))
             sys.scf_diagnostics = SCFDiagnostics(history, false, :purification_failed)
+            finish_iteration_progress(io, overwrote_scf_progress)
             verbose != :nothing && println(
-                "SCF stopped: purification ended with $(purification.termination_reason).",
+                io, "SCF stopped: purification ended with $(purification.termination_reason).",
             )
             return false
         end
         ρ_purified_device = purification.rho
 
-        if verbose == :Density
-            T1_purified = real(tr(ρ_purified_device))
-            println("  Trace (Ne) of purified ρ: $T1_purified")
-        end
         rho_previous = sys.ρ
         sys.ρ = to_cpu(ρ_purified_device) #Ok updates rho!
         #=
@@ -210,19 +203,31 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             purification.iterations,
             energy_total,
         ))
-        if verbose == :all
-            println("  Residuals (%): VH=$(vh_residual * 100), VF=$(vf_residual * 100), ρ=$(rho_residual * 100), [H,ρ]=$(commutator_residual * 100)")
+        if verbose != :nothing
+            details = @sprintf(
+                "Tr=%.12g | VH=%.3e | VF=%.3e | ρ=%.3e | [H,ρ]=%.3e",
+                purification.trace,
+                vh_residual,
+                vf_residual,
+                rho_residual,
+                commutator_residual,
+            )
             if !isnothing(fock_components)
                 horizontal_norm = sqrt(max(0.0, real(inner(fock_components.horizontal, fock_components.horizontal))))
                 vertical_norm = sqrt(max(0.0, real(inner(fock_components.vertical, fock_components.vertical))))
-                println("  Square Fock norms: horizontal=$horizontal_norm, vertical=$vertical_norm")
+                details *= @sprintf(" | ||VFₓ||=%.3e | ||VFᵧ||=%.3e", horizontal_norm, vertical_norm)
             end
+            overwrote_scf_progress = print_iteration_progress(
+                io, "SCF", iter, params.scf_max_iterations, details;
+                overwrite=overwrite_progress,
+            )
         end
 
         current_record = history[end]
         if detect_two_cycles && _scf_is_two_cycle(current_record, cycle_tolerance)
             termination_reason = :two_cycle_detected
-            verbose != :nothing && println("SCF stopped: detected a two-cycle in the density matrix.")
+            finish_iteration_progress(io, overwrote_scf_progress)
+            verbose != :nothing && println(io, "SCF stopped: detected a two-cycle in the density matrix.")
             break
         end
 
@@ -233,8 +238,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         )
             converged = true
             termination_reason = :converged
+            finish_iteration_progress(io, overwrote_scf_progress)
             if verbose == :all
-                println("\nSCF converged in $iter iterations.\n")
+                println(io, "SCF converged in $iter iterations.")
             end
             break
         end
@@ -257,7 +263,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         )
     end
     if !converged && verbose != :nothing
-        println("\nSCF did not converge within $(params.scf_max_iterations) iterations. Final maximum residual: $(maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100) %\n")
+        if termination_reason == :max_iterations
+            finish_iteration_progress(io, overwrote_scf_progress)
+            println(io, "SCF did not converge within $(params.scf_max_iterations) iterations. Final maximum residual: $(maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100) %")
+        end
     end
     sys.scf_diagnostics = SCFDiagnostics(history, converged, termination_reason)
     return converged    
