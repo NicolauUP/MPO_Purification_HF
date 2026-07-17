@@ -2,12 +2,16 @@ using MPO_MeanField
 using LinearAlgebra
 using Printf
 
-function purification_benchmark_parameters(; itensors_tol=1e-12, itensors_maxdim=32)
+function purification_benchmark_parameters(
+    ; itensors_tol=1e-12,
+    itensors_maxdim=32,
+    potential=(-2.0, -0.5, 0.7, 2.0),
+)
     return Parameters1D(
         L=2,
         t=0.0,
         U=0.0,
-        W=x -> (-2.0, -0.5, 0.7, 2.0)[Int(x) + 1],
+        W=x -> potential[Int(x) + 1],
         S=nothing,
         tci_tol=1e-10,
         itensors_tol=itensors_tol,
@@ -72,17 +76,19 @@ function benchmark_purification_methods(; repetitions=3)
     cases = (
         ("tight", purification_benchmark_parameters(), (-2.5, 2.5)),
         ("wide", purification_benchmark_parameters(itensors_tol=1e-8, itensors_maxdim=16), (-7.0, 7.0)),
+        ("gap", purification_benchmark_parameters(potential=(-2.0, -0.01, 0.01, 2.0)), (-2.5, 2.5)),
     )
     for (_, params, bounds) in cases, method in (:sp2, :palser_manolopoulos)
         purification_benchmark_case(method, params, bounds) # compile/warm-up
     end
 
-    println("case method  status              median_s  alloc_B  gc_s  squares cubes  maxχ meanχ  trace_err idem  proj_err comm")
+    println("case method  status              median_s  alloc_B  gc_s  live_heap_B rss_increase_B process_peak_rss_B  squares cubes  maxχ meanχ  trace_err idem  proj_err comm")
     for (label, params, bounds) in cases, method in (:sp2, :palser_manolopoulos)
         times = Float64[]
         allocations = Int[]
         gc_times = Float64[]
         latest = nothing
+        rss_before = Sys.maxrss()
         for _ in 1:repetitions
             GC.gc(true)
             timing = @timed purification_benchmark_case(method, params, bounds)
@@ -92,8 +98,10 @@ function benchmark_purification_methods(; repetitions=3)
             push!(gc_times, timing.gctime)
         end
         result = latest.result
-        @printf("%-4s %-20s %-18s %.6f %8d %.6f %7d %5d %5d %.2f %.2e %.2e %.2e %.2e\n",
+        rss_after = Sys.maxrss()
+        @printf("%-4s %-20s %-18s %.6f %8d %.6f %11d %14d %20d %7d %5d %5d %.2f %.2e %.2e %.2e %.2e\n",
             label, String(method), String(result.termination_reason), median(times), median(allocations), median(gc_times),
+            Base.gc_live_bytes(), max(0, rss_after - rss_before), rss_after,
             result.work.squares, result.work.cubes, result.work.max_bond_dimension,
             result.work.mean_bond_dimension, result.trace_error, result.idempotency_residual,
             latest.projector_error, latest.commutator,
