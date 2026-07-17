@@ -27,9 +27,6 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     to_cpu=identity,
     cleanup= () -> nothing)
 
-    sys.params isa ParametersSquare && throw(ArgumentError(
-        "square-lattice SCF is unsupported: square Hartree/Fock field extraction is not implemented",
-    ))
     _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
 
 
@@ -116,8 +113,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         =#
 
         # Step 2: Extract Hartree potential
-        vh_mpo_cpu = extract_hartree_mpo_1d(sys)
-        vf_mpo_cpu = extract_fock_mpo_1d(sys) 
+        vh_mpo_cpu, vf_mpo_cpu = extract_mean_fields(sys)
 
         vh_mpo = to_gpu(vh_mpo_cpu)
         vf_mpo = to_gpu(vf_mpo_cpu)
