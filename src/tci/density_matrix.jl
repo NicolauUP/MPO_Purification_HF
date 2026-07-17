@@ -173,6 +173,57 @@ function _shift_qtt_tensors_binary_carry(
 end
 
 """
+    _density_superdiagonal_qtt_tensors_binary_carry(rho, sites)
+
+Contract the density MPO locally onto its open-chain superdiagonal,
+`rho[i, i + 1]`. The QTT output coordinate is the row index `i`; a binary
+increment carry selects the column index `i + 1`. The carry enters at the
+least-significant bit, and an overflow out of the most-significant bit is
+discarded, leaving the final output coefficient exactly zero.
+"""
+function _density_superdiagonal_qtt_tensors_binary_carry(
+    rho::MPO,
+    sites::Vector{<:Index},
+)
+    length(rho) == length(sites) || throw(ArgumentError(
+        "density MPO and site counts must agree",
+    ))
+    L = length(sites)
+    carries = [Index(2, "FockCarry,link=$link") for link in 1:(L - 1)]
+    band = Vector{ITensor}(undef, L)
+
+    for site_number in 1:L
+        site = sites[site_number]
+        output_site = sim(site)
+        local_tensor = nothing
+        for row_bit in 0:1, carry_in in 0:1
+            column_bit, carry_out = _binary_shift_transition(
+                row_bit, carry_in, :right,
+            )
+            site_number == L && carry_in != 1 && continue
+            site_number == 1 && carry_out != 0 && continue
+
+            term = rho[site_number] * onehot(prime(site) => row_bit + 1)
+            term *= onehot(site => column_bit + 1)
+            term *= onehot(output_site => row_bit + 1)
+            site_number > 1 && (term *= onehot(carries[site_number - 1] => carry_out + 1))
+            site_number < L && (term *= onehot(carries[site_number] => carry_in + 1))
+            local_tensor = isnothing(local_tensor) ? term : local_tensor + term
+        end
+        band[site_number] = replaceind(local_tensor, output_site => site)
+    end
+
+    for site_number in 1:(L - 1)
+        density_link = commonind(rho[site_number], rho[site_number + 1])
+        carry_link = carries[site_number]
+        fuse_links = combiner(density_link, carry_link)
+        band[site_number] *= fuse_links
+        band[site_number + 1] *= ITensors.dag(fuse_links)
+    end
+    return band
+end
+
+"""
     extract_hartree_mpo_binary_carry_1d(sys)
 
 Experimental fused tensorial 1D Hartree extractor. It obtains the QTT density
@@ -201,6 +252,42 @@ function extract_hartree_mpo_binary_carry_1d(sys::System)
     return +(0.5 * hartree, 0.5 * ITensors.dag(hartree);
         cutoff=sys.params.itensors_tol,
         maxdim=sys.params.itensors_maxdim,
+    )
+end
+
+"""
+    extract_fock_mpo_binary_carry_1d(sys)
+
+Experimental 1D Fock extractor. It contracts `rho[i, i + 1]` directly with a
+local binary carry, converts the result to the established real exchange
+coefficient `-U * real(rho[i, i + 1])`, then uses the existing translation-MPO
+assembly for the Hermitian nearest-neighbour field. Cached TCI remains the
+default path.
+"""
+function extract_fock_mpo_binary_carry_1d(sys::System)
+    sys.params isa Parameters1D || throw(ArgumentError(
+        "extract_fock_mpo_binary_carry_1d requires Parameters1D",
+    ))
+    params = sys.params
+    iszero(params.U) && return zero_mpo(sys.sites)
+
+    band_tensors = _density_superdiagonal_qtt_tensors_binary_carry(sys.ρ, sys.sites)
+    real_bond_order = _diagonal_mpo_from_qtt_tensors(
+        band_tensors, sys.sites, params; symmetrize=true,
+    )
+    coefficients = -params.U * real_bond_order
+    T_R, T_L = sys.translations
+    right_term = apply(coefficients, T_R;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    left_term = apply(T_L, ITensors.dag(coefficients);
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    return +(right_term, left_term;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
     )
 end
 

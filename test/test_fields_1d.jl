@@ -47,4 +47,25 @@
 
     carry_hartree = dense_matrix(extract_hartree_mpo_binary_carry_1d(sys), sys)
     @test carry_hartree ≈ vh atol=1e-10
+
+    carry_fock = dense_matrix(extract_fock_mpo_binary_carry_1d(sys), sys)
+    @test carry_fock ≈ vf atol=1e-10
+    @test opnorm(carry_fock - carry_fock') < 1e-12
+
+    # The present mean-field convention deliberately retains only the real
+    # exchange coefficient. This complex Hermitian density distinguishes a
+    # direct superdiagonal contraction from a transposed/conjugated one.
+    complex_bond_diagonal = (1 + 2im) * bond_diagonal
+    complex_right = apply(complex_bond_diagonal, T_R;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    complex_left = apply(T_L, ITensors.dag(complex_bond_diagonal);
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    sys.ρ = +(diagonal, complex_right, complex_left;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    complex_carry_fock = dense_matrix(extract_fock_mpo_binary_carry_1d(sys), sys)
+    @test opnorm(complex_carry_fock - expected_vf) < 1e-10
+    @test opnorm(complex_carry_fock - complex_carry_fock') < 1e-12
 end

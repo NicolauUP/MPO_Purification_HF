@@ -12,14 +12,18 @@
     noninteracting.ρ = Identity_MPO(noninteracting.sites) * 0.5
     vh = extract_hartree_mpo_1d(noninteracting)
     vf = extract_fock_mpo_1d(noninteracting)
+    carry_vf = extract_fock_mpo_binary_carry_1d(noninteracting)
     @test norm(dense_matrix(vh, noninteracting)) == 0.0
     @test norm(dense_matrix(vf, noninteracting)) == 0.0
+    @test norm(dense_matrix(carry_vf, noninteracting)) == 0.0
 
     zero_density = System(parameters_1d(U=0.3, S=nothing))
     vh_zero_density = extract_hartree_mpo_1d(zero_density)
     vf_zero_density = extract_fock_mpo_1d(zero_density)
+    carry_vf_zero_density = extract_fock_mpo_binary_carry_1d(zero_density)
     @test norm(dense_matrix(vh_zero_density, zero_density)) == 0.0
     @test norm(dense_matrix(vf_zero_density, zero_density)) == 0.0
+    @test norm(dense_matrix(carry_vf_zero_density, zero_density)) == 0.0
 
     scf_system = System(parameters_1d(
         U=0.0,
