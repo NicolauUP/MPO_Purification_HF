@@ -50,14 +50,14 @@ function _benchmark_dense_matrix(mpo, sys)
 end
 
 """
-    benchmark_tensorial_hartree(; L=4, repetitions=3)
+    benchmark_tensorial_hartree(; L=3, repetitions=1)
 
 Compare the cached-TCI and direct tensorial Hartree extractors on one small,
 nonuniform Hermitian 1D density MPO. Returned allocation counts are cumulative
 allocations from `@timed`, not peak memory. This is a local prototype benchmark,
 not a production performance claim.
 """
-function benchmark_tensorial_hartree(; L=4, repetitions=3)
+function benchmark_tensorial_hartree(; L=3, repetitions=1)
     L > 0 || throw(ArgumentError("L must be positive"))
     repetitions > 0 || throw(ArgumentError("repetitions must be positive"))
     sys = tensorial_hartree_benchmark_system(L)
