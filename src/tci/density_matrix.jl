@@ -50,6 +50,49 @@ function extract_hartree_mpo_1d(sys::System)
     )
 end
 
+struct HartreeEvaluateSquare
+    sys::System
+    density_cache::Dict{Int,Float64}
+end
+
+function (evaluator::HartreeEvaluateSquare)(coordinate::Real)
+    site = Int(coordinate) + 1
+    value = 0.0
+    for neighbour in values(square_neighbours(site, evaluator.sys.params.L))
+        isnothing(neighbour) && continue
+        density = get!(evaluator.density_cache, neighbour) do
+            real(MatrixChecker(
+                evaluator.sys.ρ,
+                evaluator.sys.sites,
+                neighbour,
+                neighbour,
+                evaluator.sys.bra_states,
+                evaluator.sys.ket_states,
+            ))
+        end
+        value += evaluator.sys.params.U * density
+    end
+    return value
+end
+
+"""
+    extract_hartree_mpo_square(sys)
+
+Construct the open-boundary square-lattice Hartree field. At each site it is
+`U` times the sum of the density on its valid right, left, up, and down
+neighbours. No periodic wraparound terms are included.
+"""
+function extract_hartree_mpo_square(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_hartree_mpo_square requires ParametersSquare",
+    ))
+    iszero(sys.params.U) && return zero_mpo(sys.sites)
+    evaluator = HartreeEvaluateSquare(sys, Dict{Int,Float64}())
+    return diagonal_mpo_from_function(
+        x -> evaluator(x), Float64, sys.sites, sys.params.tci_tol,
+    )
+end
+
 
 
 struct FockEvaluator1D
