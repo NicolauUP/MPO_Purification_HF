@@ -43,6 +43,7 @@ struct SCFIterationRecord
     vf_residual::Float64
     rho_residual::Float64
     commutator_residual::Float64
+    two_cycle_residual::Float64
     purification_converged::Bool
     purification_termination_reason::Symbol
     purification_iterations::Int

@@ -21,6 +21,33 @@ function _scf_energy_total(sys::System)
     return nothing
 end
 
+function _scf_record_within_tolerance(record::SCFIterationRecord, tolerance::Real)
+    residuals = (
+        record.vh_residual,
+        record.vf_residual,
+        record.rho_residual,
+        record.commutator_residual,
+    )
+    return all(isfinite, residuals) && maximum(residuals) <= tolerance
+end
+
+function _scf_has_stable_history(
+    history::Vector{SCFIterationRecord},
+    tolerance::Real;
+    required_iterations::Integer=2,
+)
+    required_iterations > 0 || throw(ArgumentError("required_iterations must be positive"))
+    length(history) >= required_iterations || return false
+    return all(record -> _scf_record_within_tolerance(record, tolerance),
+        @view history[(end - required_iterations + 1):end])
+end
+
+function _scf_is_two_cycle(record::SCFIterationRecord, tolerance::Real)
+    return isfinite(record.two_cycle_residual) &&
+           record.two_cycle_residual <= tolerance &&
+           isfinite(record.rho_residual) && record.rho_residual > tolerance
+end
+
 function run_scf!(sys::System, H_min::Float64, H_max::Float64; 
     verbose::Symbol=:nothing,
     allow_unconverged_purification::Bool=false,
@@ -33,11 +60,15 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     gc_threshold_bytes::Integer=1 << 30,
     purification_cleanup::Function=() -> nothing,
     record_energy::Bool=false,
+    stable_iterations::Integer=2,
+    detect_two_cycles::Bool=true,
+    two_cycle_tolerance::Union{Nothing,Real}=nothing,
     to_gpu=identity,
     to_cpu=identity,
     cleanup= () -> nothing)
 
     _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
+    stable_iterations > 0 || throw(ArgumentError("stable_iterations must be positive"))
 
 
     if verbose == :all
@@ -58,6 +89,11 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
    
     params = sys.params
+    residual_tolerance = params.scf_tol / 100
+    cycle_tolerance = isnothing(two_cycle_tolerance) ? residual_tolerance : Float64(two_cycle_tolerance)
+    isfinite(cycle_tolerance) && cycle_tolerance > 0 || throw(ArgumentError(
+        "two_cycle_tolerance must be finite and positive",
+    ))
 
     converged = false
     termination_reason = :max_iterations
@@ -67,6 +103,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     vf_residual = Inf
     rho_residual = Inf
     commutator_residual = Inf
+    rho_two_steps_ago = nothing
     for iter in 1:params.scf_max_iterations
         if verbose != :nothing
             println("\n ----------- SCF Iteration $iter")
@@ -109,6 +146,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 vf_residual,
                 rho_residual,
                 commutator_residual,
+                Inf,
                 false,
                 purification.termination_reason,
                 purification.iterations,
@@ -156,6 +194,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             vf_residual = _mpo_relative_change(vf_mpo, sys.VF, params)
             rho_residual = _mpo_relative_change(sys.ρ, rho_previous, params)
         end
+        two_cycle_residual = iter >= 3 ?
+            _mpo_relative_change(sys.ρ, rho_two_steps_ago, params) : Inf
         energy_total = record_energy ? _scf_energy_total(sys) : nothing
         push!(history, SCFIterationRecord(
             iter,
@@ -164,6 +204,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             vf_residual,
             rho_residual,
             commutator_residual,
+            two_cycle_residual,
             purification.converged,
             purification.termination_reason,
             purification.iterations,
@@ -178,7 +219,18 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             end
         end
 
-        if iter > 1 && maximum((vh_residual, vf_residual, rho_residual, commutator_residual)) * 100 < params.scf_tol
+        current_record = history[end]
+        if detect_two_cycles && _scf_is_two_cycle(current_record, cycle_tolerance)
+            termination_reason = :two_cycle_detected
+            verbose != :nothing && println("SCF stopped: detected a two-cycle in the density matrix.")
+            break
+        end
+
+        if _scf_has_stable_history(
+            history,
+            residual_tolerance;
+            required_iterations=stable_iterations,
+        )
             converged = true
             termination_reason = :converged
             if verbose == :all
@@ -194,6 +246,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
             sys.VF = +(sys.params.scf_mixing * vf_mpo, (1 - params.scf_mixing) * sys.VF; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
         end
+        rho_two_steps_ago = rho_previous
         # Optional external cleanup may reclaim device memory; host GC follows
         # the explicit policy above instead of being forced every iteration.
         cleanup()
