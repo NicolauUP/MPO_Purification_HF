@@ -41,4 +41,7 @@
     evaluator(0.0)
     evaluator(1.0)
     @test sort(collect(keys(evaluator.density_cache))) == [1, 2, 3]
+
+    tensorial_hartree = dense_matrix(extract_hartree_mpo_tensorial_1d(sys), sys)
+    @test tensorial_hartree ≈ hartree atol=1e-10
 end

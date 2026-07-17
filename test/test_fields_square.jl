@@ -25,6 +25,9 @@
         if !isnothing(neighbour)
     ]
     @test sort(collect(keys(evaluator.density_cache))) == sort(unique(expected_cached_sites))
+
+    tensorial_hartree = dense_matrix(extract_hartree_mpo_tensorial_square(sys), sys)
+    @test tensorial_hartree ≈ hartree atol=1e-10
 end
 
 @testset "P1.3 square horizontal Fock dense reference" begin

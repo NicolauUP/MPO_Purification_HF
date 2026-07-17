@@ -50,6 +50,73 @@ function extract_hartree_mpo_1d(sys::System)
     )
 end
 
+"""
+    _density_diagonal_mpo(rho, sites, params)
+
+Project the bra/ket physical indices of an MPO onto equal local states and
+return the resulting diagonal MPO. The symmetrization preserves the current
+Hartree convention `real(rho[i,i])` when finite MPO truncation leaves a small
+anti-Hermitian diagonal component.
+"""
+function _density_diagonal_mpo(
+    rho::MPO,
+    sites::Vector{<:Index},
+    params::AbstractModelParameters,
+)
+    diagonal = MPO(length(sites))
+    for site_number in eachindex(sites)
+        site = sites[site_number]
+        output_site = sim(site)
+        projected = rho[site_number] * delta(prime(site), site, output_site)
+        projected = replaceind(projected, output_site => site)
+        diagonal[site_number] = Quantics._asdiagonal(projected, site)
+    end
+    return +(0.5 * diagonal, 0.5 * ITensors.dag(diagonal);
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+end
+
+function _shift_diagonal_mpo(
+    diagonal::MPO,
+    forward::MPO,
+    backward::MPO,
+    params::AbstractModelParameters,
+)
+    shifted = apply(forward, diagonal;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    return apply(shifted, backward;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+end
+
+"""
+    extract_hartree_mpo_tensorial_1d(sys)
+
+Experimental tensorial 1D Hartree extractor. It projects the density MPO
+diagonal directly, then shifts it with the open-chain translation MPOs:
+`U * (T_R D_n T_L + T_L D_n T_R)`. This avoids scalar `MatrixChecker` calls
+and TCI reconstruction, but remains opt-in until benchmarks establish its
+runtime and bond-dimension behavior.
+"""
+function extract_hartree_mpo_tensorial_1d(sys::System)
+    sys.params isa Parameters1D || throw(ArgumentError(
+        "extract_hartree_mpo_tensorial_1d requires Parameters1D",
+    ))
+    iszero(sys.params.U) && return zero_mpo(sys.sites)
+    density_diagonal = _density_diagonal_mpo(sys.ρ, sys.sites, sys.params)
+    T_R, T_L = sys.translations
+    right_density = _shift_diagonal_mpo(density_diagonal, T_R, T_L, sys.params)
+    left_density = _shift_diagonal_mpo(density_diagonal, T_L, T_R, sys.params)
+    return +(sys.params.U * right_density, sys.params.U * left_density;
+        cutoff=sys.params.itensors_tol,
+        maxdim=sys.params.itensors_maxdim,
+    )
+end
+
 struct HartreeEvaluateSquare
     sys::System
     density_cache::Dict{Int,Float64}
@@ -90,6 +157,31 @@ function extract_hartree_mpo_square(sys::System)
     evaluator = HartreeEvaluateSquare(sys, Dict{Int,Float64}())
     return diagonal_mpo_from_function(
         x -> evaluator(x), Float64, sys.sites, sys.params.tci_tol,
+    )
+end
+
+"""
+    extract_hartree_mpo_tensorial_square(sys)
+
+Experimental tensorial square Hartree extractor. It directly projects the
+density diagonal and applies the four open-boundary translations, preserving
+the same four-neighbour convention as [`extract_hartree_mpo_square`](@ref).
+"""
+function extract_hartree_mpo_tensorial_square(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_hartree_mpo_tensorial_square requires ParametersSquare",
+    ))
+    iszero(sys.params.U) && return zero_mpo(sys.sites)
+    density_diagonal = _density_diagonal_mpo(sys.ρ, sys.sites, sys.params)
+    T_R, T_L, T_U, T_D = sys.translations
+    right_density = _shift_diagonal_mpo(density_diagonal, T_R, T_L, sys.params)
+    left_density = _shift_diagonal_mpo(density_diagonal, T_L, T_R, sys.params)
+    up_density = _shift_diagonal_mpo(density_diagonal, T_U, T_D, sys.params)
+    down_density = _shift_diagonal_mpo(density_diagonal, T_D, T_U, sys.params)
+    return +(sys.params.U * right_density, sys.params.U * left_density,
+        sys.params.U * up_density, sys.params.U * down_density;
+        cutoff=sys.params.itensors_tol,
+        maxdim=sys.params.itensors_maxdim,
     )
 end
 
