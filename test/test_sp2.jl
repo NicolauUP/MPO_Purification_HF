@@ -38,6 +38,8 @@ end
     @test result.work.squares == result.iterations
     @test result.work.cubes == 0
     @test result.work.max_bond_dimension >= result.final_bond_dimension
+    @test length(result.work.bond_dimensions) == result.iterations
+    @test all(dimensions -> dimensions[3] == 0, result.work.bond_dimensions)
     @test opnorm(rho - exact) < 2e-3
 
     default_result = perform_purification(

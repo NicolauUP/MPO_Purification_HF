@@ -40,6 +40,7 @@ function perform_purification_palser_manolopoulos(
     max_bond_dimension = maxlinkdim(ρ0)
     bond_dimension_sum = 0
     bond_dimension_samples = 0
+    bond_dimensions = NTuple{3,Int}[]
 
 
     for i in 1:params.purification_steps
@@ -56,8 +57,10 @@ function perform_purification_palser_manolopoulos(
         max_bond_dimension = max(max_bond_dimension, maxlinkdim(ρ0), maxlinkdim(P2), maxlinkdim(P3))
         bond_dimension_sum += maxlinkdim(ρ0) + maxlinkdim(P2) + maxlinkdim(P3)
         bond_dimension_samples += 3
+        push!(bond_dimensions, (maxlinkdim(ρ0), maxlinkdim(P2), maxlinkdim(P3)))
         work = PurificationWorkStats(
             i, i, max_bond_dimension, bond_dimension_sum / bond_dimension_samples,
+            copy(bond_dimensions),
         )
 
         if verbose > 0
@@ -163,6 +166,7 @@ function perform_purification_palser_manolopoulos(
         work=PurificationWorkStats(
             params.purification_steps, params.purification_steps, max_bond_dimension,
             bond_dimension_sum / max(1, bond_dimension_samples),
+            copy(bond_dimensions),
         ),
     )
 end

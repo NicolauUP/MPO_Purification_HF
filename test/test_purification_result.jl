@@ -32,6 +32,8 @@ end
     @test successful.work.cubes == successful.iterations
     @test successful.work.max_bond_dimension >= successful.final_bond_dimension
     @test successful.work.mean_bond_dimension >= 1
+    @test length(successful.work.bond_dimensions) == successful.iterations
+    @test all(dimensions -> dimensions[3] > 0, successful.work.bond_dimensions)
 
     limited_params = parameters_1d(U=0.0, purification_steps=1)
     _, limited_rho0 = purification_initial_state(limited_params)

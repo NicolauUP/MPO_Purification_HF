@@ -9,6 +9,7 @@ struct PurificationWorkStats
     cubes::Int
     max_bond_dimension::Int
     mean_bond_dimension::Float64
+    bond_dimensions::Vector{NTuple{3,Int}}
 end
 
 struct PurificationResult{R}
@@ -110,7 +111,9 @@ function purification_result(
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
     target_particles::Union{Nothing,Real}=round(Int, 2^params.L * params.density),
-    work::PurificationWorkStats=PurificationWorkStats(0, 0, maxlinkdim(rho), Float64(maxlinkdim(rho))),
+    work::PurificationWorkStats=PurificationWorkStats(
+        0, 0, maxlinkdim(rho), Float64(maxlinkdim(rho)), [(maxlinkdim(rho), 0, 0)],
+    ),
 )
     rho_squared = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     trace_value = Float64(real(tr(rho)))

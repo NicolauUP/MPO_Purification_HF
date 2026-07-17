@@ -53,6 +53,7 @@ function perform_purification_sp2(
     max_bond_dimension = maxlinkdim(rho)
     bond_dimension_sum = 0
     bond_dimension_samples = 0
+    bond_dimensions = NTuple{3,Int}[]
 
     for iteration in 1:params.purification_steps
         rho_squared = apply(rho, rho;
@@ -61,8 +62,10 @@ function perform_purification_sp2(
         max_bond_dimension = max(max_bond_dimension, maxlinkdim(rho), maxlinkdim(rho_squared))
         bond_dimension_sum += maxlinkdim(rho) + maxlinkdim(rho_squared)
         bond_dimension_samples += 2
+        push!(bond_dimensions, (maxlinkdim(rho), maxlinkdim(rho_squared), 0))
         work = PurificationWorkStats(
             iteration, 0, max_bond_dimension, bond_dimension_sum / bond_dimension_samples,
+            copy(bond_dimensions),
         )
         trace_value = real(tr(rho))
         trace_squared = real(tr(rho_squared))
@@ -143,6 +146,7 @@ function perform_purification_sp2(
         work=PurificationWorkStats(
             params.purification_steps, 0, max_bond_dimension,
             bond_dimension_sum / max(1, bond_dimension_samples),
+            copy(bond_dimensions),
         ),
     )
 end

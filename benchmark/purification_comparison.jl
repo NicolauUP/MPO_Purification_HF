@@ -106,6 +106,8 @@ function benchmark_purification_methods(; repetitions=3)
             result.work.mean_bond_dimension, result.trace_error, result.idempotency_residual,
             latest.projector_error, latest.commutator,
         )
+        labels = method == :sp2 ? ("rho", "rho2", "-") : ("rho", "rho2", "rho3")
+        println("  bond dimensions by iteration ($(join(labels, ", "))): ", result.work.bond_dimensions)
     end
 end
 
