@@ -63,3 +63,40 @@ end
     @test opnorm(fock - expected) < 1e-10
     @test opnorm(fock - fock') < 1e-12
 end
+
+@testset "P1.4 square vertical Fock dense reference" begin
+    params = parameters_square(L=4, U=0.7, S=nothing)
+    sys = System(params)
+    occupations = x -> 0.1 + 0.01 * Int(x)
+    vertical_bond = coordinate -> begin
+        x, y = square_lattice_decoder(Int(coordinate), params.L)
+        return y < 3 ? 0.015 * (1 + 2x + y) : 0.0
+    end
+    diagonal = MPO_MeanField.diagonal_mpo_from_function(
+        occupations, Float64, sys.sites, params.tci_tol,
+    )
+    bond_diagonal = MPO_MeanField.diagonal_mpo_from_function(
+        vertical_bond, Float64, sys.sites, params.tci_tol,
+    )
+    _, _, T_U, T_D = sys.translations
+    rho_up = apply(bond_diagonal, T_U;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    rho_down = apply(T_D, ITensors.dag(bond_diagonal);
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    sys.ρ = +(diagonal, rho_up, rho_down;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+
+    rho = dense_matrix(sys.ρ, sys)
+    fock = dense_matrix(extract_fock_mpo_square_vertical(sys), sys)
+    expected = zeros(16, 16)
+    for (site, up, orientation) in square_undirected_bonds(params.L)
+        orientation == :vertical || continue
+        expected[site, up] = -params.U * real(rho[site, up])
+        expected[up, site] = expected[site, up]
+    end
+    @test opnorm(fock - expected) < 1e-10
+    @test opnorm(fock - fock') < 1e-12
+end
