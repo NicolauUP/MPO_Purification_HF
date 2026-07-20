@@ -46,8 +46,18 @@
         end
     end
 
-    # PM has its own inner iteration boundary; accepting the non-default
-    # policy here verifies propagation from run_scf! through the dispatcher.
+    # PM has its own inner iteration boundary; use a static non-interacting
+    # problem here so this section isolates GC-policy propagation rather than
+    # PM's separate interacting trace-drift behaviour.
+    pm_params = parameters_1d(
+        t=-0.7,
+        W=x -> (-0.2, 0.1, -0.05, 0.25)[Int(x) + 1],
+        U=0.0,
+        purification_steps=35,
+        scf_mixing=0.5,
+        scf_tol=0.1,
+        scf_max_iterations=20,
+    )
     pm_reference = nothing
     for (policy, period, threshold) in (
         (:automatic, 10, 1 << 30),
@@ -55,7 +65,7 @@
         (:periodic, 2, 1 << 30),
         (:threshold, 10, 1),
     )
-        sys_pm = System(params)
+        sys_pm = System(pm_params)
         @test run_scf!(sys_pm, -5.0, 5.0;
             purification_method=:palser_manolopoulos,
             gc_policy=policy,
