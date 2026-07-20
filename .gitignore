@@ -4,3 +4,7 @@ data/
 *.hdf5
 *.png
 notebooks/
+
+# Local/container dependency depots and exported images are transfer artefacts.
+cluster_depot/
+*.tar.gz
