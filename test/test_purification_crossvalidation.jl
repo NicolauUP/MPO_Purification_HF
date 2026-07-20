@@ -79,7 +79,7 @@ end
         Ne = round(Int, size(H, 1) * params.density)
         exact = exact_occupied_projector(H, Ne)
 
-        @testset label begin
+        @testset "$label" begin
             @test pm.converged && sp2.converged
             @test pm.idempotency_residual < 1e-3
             @test sp2.idempotency_residual < 1e-3
