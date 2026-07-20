@@ -14,11 +14,11 @@ mkdir -p "$output_dir"
 # process_time.txt is a process-wide peak-RSS measurement, not a per-method
 # measurement; the per-method allocations/times are in samples.csv.
 if /usr/bin/time -v true >/dev/null 2>&1; then
-  /usr/bin/time -v julia --project=. benchmark/extraction_scaling.jl \
+  /usr/bin/time -v julia --startup-file=no --project=. benchmark/extraction_scaling.jl \
     --output "$output_dir" "$@" \
     2> >(tee "$output_dir/process_time.txt" >&2)
 else
-  /usr/bin/time -l julia --project=. benchmark/extraction_scaling.jl \
+  /usr/bin/time -l julia --startup-file=no --project=. benchmark/extraction_scaling.jl \
     --output "$output_dir" "$@" \
     2> >(tee "$output_dir/process_time.txt" >&2)
 fi
