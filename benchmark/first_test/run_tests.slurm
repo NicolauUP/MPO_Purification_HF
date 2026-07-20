@@ -29,4 +29,7 @@ echo "Julia executable: $(command -v julia)"
 julia --version
 echo "Julia threads: ${JULIA_NUM_THREADS}"
 
-julia --project=. -e 'using Pkg; Pkg.test()'
+# Run the repository's maintained test entry point directly. Using Pkg.test()
+# here would try to initialize/download the General registry on an offline
+# compute node before the tests start.
+julia --project=. test/runtests.jl

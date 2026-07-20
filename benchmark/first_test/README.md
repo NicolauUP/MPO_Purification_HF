@@ -6,8 +6,10 @@ Submit from the `MPO_Purification_HF` directory:
 sbatch benchmark/first_test/run_tests.slurm
 ```
 
-The script loads `julia/1.12.6` and runs the maintained package test suite with
-`Pkg.test()`. Slurm writes the job output to:
+The script loads `julia/1.12.6` and runs the maintained
+`test/runtests.jl` entry point directly. Direct invocation avoids `Pkg.test()`
+trying to download the General registry on the offline compute node. Slurm
+writes the job output to:
 
 ```text
 qtt_hf_first_test-<JOB_ID>.out
