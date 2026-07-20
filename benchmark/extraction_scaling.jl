@@ -198,10 +198,17 @@ end
 function _write_metadata(output_dir::String, levels, sources, warmups, repetitions)
     project = Base.active_project()
     package_root = normpath(joinpath(@__DIR__, ".."))
-    package_commit = try
-        readchomp(`git -C $package_root rev-parse HEAD`)
-    catch
-        "unavailable"
+    # Cluster source trees are commonly deployed with rsync and without `.git`.
+    # Do not invoke Git (or emit its stderr) when provenance is unavailable.
+    package_commit = "unavailable"
+    if isdir(joinpath(package_root, ".git"))
+        try
+            package_commit = readchomp(pipeline(
+                `git -C $package_root rev-parse HEAD`, stderr=devnull,
+            ))
+        catch
+            # Git metadata is optional for a deployed cluster source tree.
+        end
     end
     project_hash = isfile(project) ? bytes2hex(sha256(read(project))) : "unavailable"
     manifest_path = joinpath(dirname(project), "Manifest.toml")
