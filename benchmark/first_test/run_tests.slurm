@@ -23,6 +23,8 @@ cd "$WORKING_DIR"
 export JULIA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-1}"
 export OPENBLAS_NUM_THREADS=1
 export MKL_NUM_THREADS=1
+export JULIA_DEPOT_PATH="${JULIA_DEPOT_PATH:-/gpfs/projects/epor78/cluster_depot}"
+export JULIA_PKG_PRECOMPILE_AUTO=0
 
 echo "Working directory: $(pwd)"
 echo "Julia executable: $(command -v julia)"
@@ -32,4 +34,4 @@ echo "Julia threads: ${JULIA_NUM_THREADS}"
 # Run the repository's maintained test entry point directly. Using Pkg.test()
 # here would try to initialize/download the General registry on an offline
 # compute node before the tests start.
-julia --project=. test/runtests.jl
+julia --startup-file=no --project=. test/runtests.jl
