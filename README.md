@@ -1,160 +1,315 @@
-# HartreeFockMPO.jl
+# MPO_MeanField.jl
 
-A Julia package for Hartree-Fock mean-field theory of short-range interacting
-spinless lattice systems, using Matrix Product Operator (MPO) techniques.
+`MPO_MeanField.jl` is a Julia research package for zero-temperature,
+spinless, nearest-neighbour Hartree–Fock calculations on binary-encoded
+lattices. It represents one-body Hamiltonians, density matrices, and
+mean-field potentials as matrix-product operators (MPOs), and obtains the
+occupied projector through density-matrix purification.
 
-## Physical Setup
+The package is intended for method development and controlled numerical
+studies. It has small-system dense-reference tests, but it is not a
+black-box production electronic-structure code: spectral bounds, MPO
+truncation, convergence diagnostics, and sensitivity to initial seeds need
+to be checked for every calculation.
 
-- Spinless fermions on a lattice with `2^L` sites in binary (qubit) representation
+## What is implemented
 
-### Basis and density-matrix conventions
+- Open one-dimensional chains with \(N=2^L\) sites.
+- Open square lattices with \(L\) even and
+  \(2^{L/2}\times2^{L/2}=2^L\) sites.
+- Real scalar nearest-neighbour interaction \(U\), static potential `W`, and
+  constant or position-dependent hopping `t`.
+- Self-consistent Hartree and nearest-neighbour Fock fields in 1D and on the
+  square lattice.
+- Three zero-temperature purification modes:
+  - `:sp2` — canonical trace-correcting second-order purification; the default.
+  - `:palser_manolopoulos` — the historical canonical adaptive
+    Palser–Manolopoulos/McWeeny path (`:adaptive_pm_mcweeny` remains an alias).
+  - `:mcweeny_mu` — direct fixed-chemical-potential McWeeny purification.
+- Observable and diagnostic reporting: density, bond order, particle number,
+  energy components, Hermiticity, idempotency, and stationarity.
+- Tensor-cross-interpolation (TCI) field extraction, plus experimental 1D
+  binary-carry extractors for Hartree and Fock fields.
 
-- Julia matrix indices `i,j` correspond to zero-based binary states `i-1,j-1`;
-  `MatrixChecker(M,i,j)` evaluates `⟨i-1|M|j-1⟩`.
-- MPO sites are ordered most-significant bit first: site `1` carries the highest
-  binary digit and site `L` the lowest.
-- The one-body density matrix is `ρ_ij = ⟨c_j† c_i⟩`. Consequently, diagonal
-  entries are site occupations; `i` is the matrix row and `j` is the matrix
-  column in the orientation returned by `MatrixChecker`.
-- In the historical translation names, `T_R[n,n+1]=1` and
-  `T_L[n+1,n]=1`, so `T_L=T_R†`. Both are open-boundary shifts with no
-  end-to-end wraparound.
-- For one-dimensional functional hopping, `t(x)` is attached to the bond from
-  zero-based site `x` to site `x+1`. A static potential `W(x)` is evaluated at
-  zero-based site `x`. Thus the implemented open-chain matrix has
-  `H0[x+1,x+2]=t(x)`, its Hermitian reverse bond, and
-  `H0[x+1,x+1]=W(x)` in Julia's one-based indexing.
-- For square systems, the binary index interleaves coordinate bits with `y`
-  in the even positions and `x` in the odd positions. Functional hopping and
-  potential use zero-based coordinates: `t_x(x,y)` labels the bond to
-  `(x+1,y)`, `t_y(x,y)` labels the bond to `(x,y+1)`, and `W(x,y)` labels the
-  site `(x,y)`. Both directions have open boundaries.
+## Model and conventions
 
-### Purification spectral bounds
+The one-body density matrix is
 
-`H_min` and `H_max` are user-supplied bounds for the effective Hamiltonian and
-must enclose its full spectrum. The production workflow does not estimate them
-silently. `run_scf!(...; verify_spectral_bounds=true)` performs an exact CPU
-check after every field update for systems with at most 16 basis states; this
-is a validation tool, not a production diagonalization path. A positive
-`spectral_safety_margin` requires the supplied interval to extend beyond both
-exact endpoints by that amount.
+\[
+\rho_{ij}=\langle c_j^\dagger c_i\rangle.
+\]
 
-Purification declares convergence from the normalized MPO residual
-`||ρ²-ρ||/||ρ|| < 1e-3`; trace agreement is retained as a diagnostic and is
-not the authoritative projector test.
-- Short-range (first-neighbor) hopping, Hubbard-like on-site interactions
-- Support for uniform or spatially modulated (quasiperiodic) hopping and static potential
-- Modulations specified as plain Julia functions — TCI conversion handled internally
-- Initial state symmetry breaking via TCI-generated seed potentials (e.g., to induce Charge Density Waves)
-- Canonical Hartree-Fock via MPO purification and Tensor Cross Interpolation (TCI)
+Thus `rho[i,i]` is the occupation of site `i`. For an open nearest-neighbour
+bond \(\langle i j\rangle\), the currently implemented real-exchange
+Hartree–Fock functional is
 
-## Method Overview
+\[
+E = \operatorname{Tr}(H_0\rho) +
+U\sum_{\langle ij\rangle}
+\left[n_i n_j - \bigl(\operatorname{Re}\rho_{ij}\bigr)^2\right].
+\]
 
-1. **Static Hamiltonian & Seed Construction**: The static single-particle Hamiltonian (`H0`) is written as an MPO using a binary representation of the lattice. If `t` or `W` are functions, they are converted to diagonal MPOs via Quantics TCI. An initial symmetry-breaking potential (`seed_potential`) is also constructed to jumpstart the SCF loop.
+Every physical bond is counted once. `H0` includes hopping and the external
+potential `W`; there is no periodic wrapping or on-site interaction term.
+The Fock field and energy intentionally use `real(rho[i,j])`, so the current
+implementation is not a complex-exchange functional.
 
-2. **McWeeny Purification**: The effective Hamiltonian (`H_eff = H0 + VH`) is purified into the ground state density matrix `ρ` using an adaptive scheme. It starts with a trace-correcting linear update and switches to McWeeny (3ρ² - 2ρ³) when idempotency is close.
+### Basis and coordinates
 
-3. **TCI Extraction**: Tensor Cross Interpolation (TCI) is used dynamically to:
-   - Extract the Hartree potential (diagonal MPO) directly from the current density matrix by sampling `⟨i|ρ|i⟩`.
-   - *[Upcoming]* Extract the Fock exchange terms (off-diagonal).
+- Julia matrix index `i` corresponds to zero-based binary state `i - 1`.
+  `MatrixChecker(M, sites, i, j, bra, ket)` evaluates `M[i,j]` in this basis.
+- MPO sites are ordered from the most-significant binary bit to the least.
+- In a 1D functional model, `t(x)` labels the open bond `x → x + 1` and
+  `W(x)` labels site `x`, with zero-based `x`.
+- In a square functional model, `t=(t_x,t_y)` and `W(x,y)` use zero-based
+  coordinates. Coordinate bits are interleaved: `y` occupies the even bit
+  positions and `x` the odd positions. `square_lattice_index`,
+  `square_lattice_decoder`, and `square_neighbours` expose the package
+  convention.
 
-4. **SCF Loop**: The newly extracted Hartree MPO is mixed with the previous iteration's potential (Density Mixing) and fed back into the effective Hamiltonian. The system is iteratively re-purified until self-consistency is reached.
+## Install
 
-## Package Structure
+The project is tested with Julia 1.12.6.
 
-```text
-HartreeFockMPO/
-├── Project.toml                    # Package dependencies
-├── README.md                       # This file
-├── test_main.jl                    # Main test script
-│
-└── src/
-    ├── HartreeFockMPO.jl           # Module entry point — includes + exports
-    │
-    ├── core/
-    │   ├── operators.jl            # Custom ITensors qubit operator definitions
-    │   │                           # (σ+, σ-, P+, P-, σz) + Identity_MPO
-    │   └── system.jl               # ModelParameters and mutable System structs
-    │                               # Initializes static H0 and dynamic state (VH, ρ)
-    │
-    ├── hamiltonians/
-    │   └── mpo_construction.jl     # Build H0 and Seeds as MPOs
-    │                               # _build_translation_chain: bare hopping MPOs
-    │                               # build_H0: Kinetic + static potential W
-    │                               # build_seed: TCI conversion of seed function
-    │
-    ├── purification/
-    │   └── mcweeny.jl              # Density matrix via purification
-    │                               # construct_rho_0(sys, params, H_max, H_min)
-    │                               #   - Bakes H_eff = H0 + VH into initial guess
-    │                               # perform_purification(ρ0, params; verbose)
-    │                               #   - Trace-correcting -> McWeeny (3ρ²-2ρ³)
-    │
-    ├── tci/
-    │   ├── modulations.jl          # Coordinate mappers & static modulations
-    │   │                           #     index_to_xy_snake, etc.
-    │   └── density_matrix.jl       # TCI extraction of Hartree/Fock from ρ
-    │                               # build_hartree(sys): Extracts V_H MPO dynamically
-    │                               # HartreeEvaluator1D: Maps TCI queries to ⟨j|ρ|j⟩
-    │
-    ├── hf/
-    │   └── selfconsistent.jl       # SCF loop orchestrator
-    │                               # run_scf!(sys, ...): Drives the purification ->
-    │                               # extraction -> mixing cycle until convergence
-    │
-    └── utils/
-        ├── quantics.jl             # TCI/Quantics utilities
-        │                           # MatrixChecker: evaluates ⟨i|MPO|j⟩
-        │                           # precompute_qtt_states: speeds up MatrixChecker
-        └── observables.jl          # Physical observables
-
-                                    # [TO BE IMPLEMENTED]
-```
-## Data Flow
-
-```text
-ModelParameters{Tt, Tu, Tw, Ts}
-  │
-  └── System(params)
-        ├── sites, bra_states, ket_states
-        ├── H0 = build_H0(sites, params)            # Static environment
-        ├── VH = build_seed(sites, params)          # Symmetry-breaking seed
-        └── rho = Id                                # Dummy init
-
-[SCF LOOP: run_scf!(sys, H_max, H_min)]
-  │
-  ├──► ρ0 = construct_rho_0(sys, ...)          # Bakes H_eff = H0 + VH into initial guess
-  │
-  ├──► result = perform_purification(ρ0, params) # Density plus convergence diagnostics
-  ├──► ρ = result.rho                          # Consume only a converged result by default
-  │
-  ├──► new_VH = build_hartree(sys)             # TCI probes new ρ, builds next Hartree MPO
-  │
-  └──► sys.VH = α * new_VH + (1 - α) * sys.VH  # Mix potentials to stabilize CDW / loop
+```bash
+git clone <repository-url>
+cd MPO_Purification_HF
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
 ```
 
-## Key Structs
+Load it with:
 
 ```julia
-ModelParameters{Tt, Tu, Tw, Ts}
-  L                 :: Int       # number of qubits (lattice has 2^L sites)
-  t                 :: Tt        # hopping:     Number | Function
-  U                 :: Tu        # interaction: Number | Function
-  W                 :: Tw        # static potential: Nothing | Function
-  seed_potential    :: Ts        # initial symmetry breaking: Nothing | Function
-  tci_tol           :: Float64   # TCI tolerance for function → MPO
-  itensors_tol      :: Float64   # ITensors SVD cutoff
-  itensors_maxdim   :: Int       # ITensors max bond dimension
-  density           :: Float64   # filling fraction (Ne = 2^L * density)
-  purification_steps:: Int       # max McWeeny iterations
-
-mutable struct System{P}
-  params     :: P                    # ModelParameters
-  sites      :: Vector{Index{Int64}} # ITensors qubit indices, length L
-  H0         :: MPO                  # Static: Kinetic + W
-  VH         :: MPO                  # Dynamic: Seed -> Hartree Potential
-  rho        :: MPO                  # Dynamic: Density Matrix
-  bra_states :: Any                  # Precomputed bases for MatrixChecker
-  ket_states :: Any                  # Precomputed bases for MatrixChecker
+using MPO_MeanField
 ```
+
+The current project environment includes CUDA and plotting-related packages,
+although the maintained solver workflow is CPU-first. A networked machine is
+normally required for the first `Pkg.instantiate()`.
+
+### Offline HPC environment
+
+On an offline compute cluster, transfer a prepared Julia depot and point
+`JULIA_DEPOT_PATH` to it. Do not use `Pkg.test()` on an offline node, because
+it may attempt to initialise a registry. Instead run the maintained test
+entry point directly:
+
+```bash
+module load julia/1.12.6
+export JULIA_DEPOT_PATH=/gpfs/projects/<account>/cluster_depot
+export JULIA_PKG_PRECOMPILE_AUTO=0
+julia --startup-file=no --project=. test/runtests.jl
+```
+
+For the supplied Slurm job, see
+[`benchmark/first_test/README.md`](benchmark/first_test/README.md).
+
+## Quick start: non-interacting 1D calculation
+
+All parameter fields are explicit. This is deliberate: numerical tolerances
+and truncation limits are part of the calculation definition.
+
+```julia
+using MPO_MeanField
+
+params = Parameters1D(
+    L=2,                         # N = 2^2 = 4 sites
+    t=-0.7,
+    U=0.0,
+    W=x -> (0.2, -0.1, 0.05, 0.4)[Int(x) + 1],
+    S=nothing,                   # optional initial mean-field seed
+    tci_tol=1e-10,
+    itensors_tol=1e-12,
+    itensors_maxdim=64,
+    density=0.5,
+    purification_steps=35,
+    scf_mixing=0.5,
+    scf_tol=0.1,
+    scf_max_iterations=10,
+)
+
+sys = System(params)
+
+# Arguments are (H_min, H_max), and must enclose every effective Hamiltonian
+# encountered during the SCF calculation.
+ok = run_scf!(sys, -5.0, 5.0;
+    purification_method=:sp2,
+    verify_spectral_bounds=true,  # exact CPU validation; only for N ≤ 16
+    verbose=:all,
+    record_energy=true,
+)
+
+ok || error("SCF did not converge: $(scf_diagnostics(sys).termination_reason)")
+obs = observables(sys)
+@show obs.particle_number obs.energy obs.idempotency_residual
+```
+
+`run_scf!` returns `true` only when its SCF residual history is stable.
+Inspect `scf_diagnostics(sys)` even after a successful run.
+
+## Quick start: open square lattice
+
+For `ParametersSquare`, `L` must be even. `L=4` describes a \(4\times4\)
+open lattice (16 sites), not a four-site lattice.
+
+```julia
+params = ParametersSquare(
+    L=4,
+    t=(-0.6, -0.35),             # (t_x, t_y)
+    U=0.15,
+    W=(x, y) -> 0.11x + 0.07y + 0.013x * y,
+    S=nothing,
+    tci_tol=1e-10,
+    itensors_tol=1e-12,
+    itensors_maxdim=64,
+    density=0.5,
+    purification_steps=35,
+    scf_mixing=0.4,
+    scf_tol=0.1,
+    scf_max_iterations=40,
+)
+
+sys = System(params)
+ok = run_scf!(sys, -5.0, 5.0;
+    purification_method=:sp2,
+    verify_spectral_bounds=true,
+    verbose=:all,
+    record_energy=true,
+)
+
+diagnostics = scf_diagnostics(sys)
+obs = observables_square(sys)
+```
+
+The corresponding tested weak-coupling reference, including diagnostics and
+a density diagonal, is documented in
+[`../docs/reference_cases/square_l4_weak_hf.md`](../docs/reference_cases/square_l4_weak_hf.md).
+
+## Purification modes
+
+All purification paths require a valid enclosing interval `(H_min, H_max)`.
+For a small system, use `verify_spectral_bounds=true` to check it against the
+dense spectrum at every SCF update. That validation is intentionally limited
+to \(N\le16\) and must not be used as a production spectral solver.
+
+| Method | Ensemble / input | Use case |
+| --- | --- | --- |
+| `:sp2` | Canonical; target `round(N*density)` | Default method when the particle number is known. |
+| `:palser_manolopoulos` | Canonical; target `round(N*density)` | Historical adaptive method; useful for comparisons. |
+| `:mcweeny_mu` | Fixed chemical potential `chemical_potential=mu` | Grand-canonical zero-temperature projector \(\Theta(\mu-H)\). The trace is an output, not an imposed target. |
+
+For `:mcweeny_mu`, `mu` must lie strictly inside the supplied spectral bounds.
+If it lies in a gap, `Tr(rho)` should be close to an integer; at an eigenvalue
+or a degeneracy, the zero-temperature particle number is ambiguous. The
+direct McWeeny path now requires relative idempotency below `1e-6` before it
+reports convergence.
+
+For every method, check at least:
+
+```julia
+result = perform_purification(rho0, params;
+    method=:sp2,
+    spectral_bounds=(H_min, H_max),
+    verbose=1,
+)
+
+@show result.converged result.termination_reason
+@show result.trace result.trace_error
+@show result.idempotency_residual result.hermiticity_residual
+@show result.final_bond_dimension result.work
+```
+
+Do not continue an SCF calculation with an unconverged purification unless
+you intentionally set `allow_unconverged_purification=true` and record why.
+
+## Convergence and diagnostics
+
+Purification diagnostics include the trace, idempotency residual,
+Hermiticity residual, termination reason, iteration count, and bond-dimension
+history. A canonical result needs both a trustworthy spectral interval and a
+trace compatible with the intended filling; idempotency alone is not enough.
+
+SCF convergence requires the Hartree-field, Fock-field, density, and
+commutator residuals to remain below the configured threshold for consecutive
+iterations (`stable_iterations=2` by default). The solver can stop with:
+
+- `:converged` — stable SCF residual history;
+- `:two_cycle_detected` — a density two-cycle rather than a fixed point;
+- `:purification_failed` — purification stopped without converging;
+- `:max_iterations` — SCF iteration budget exhausted.
+
+`verbose=:all` prints updating terminal progress on a TTY; redirected logs
+remain line-delimited. Use `record_energy=true` to retain the reported total
+energy in the SCF history.
+
+## Validation and tests
+
+Run the test suite from the package directory:
+
+```bash
+julia --startup-file=no --project=. test/runtests.jl
+```
+
+The suite covers analytical and dense-reference limits, basis conventions,
+Hamiltonian construction, field extraction, purification invariants, 1D and
+square SCF references, energy double counting, and convergence diagnostics.
+It also contains intentional difficult cases: exact Fermi-level degeneracy
+must not be mistaken for a unique zero-temperature canonical projector.
+
+The current suite records one known finite-gap square MPO-SP2 regression as
+`@test_broken`. It is deliberately visible rather than treated as a validated
+production result. Consult the test output and
+[`../docs/plans/remaining_implementation_priorities.md`](../docs/plans/remaining_implementation_priorities.md)
+before selecting SP2 settings for a new large square calculation.
+
+## Benchmarks
+
+`benchmark/extraction_scaling.jl` compares 1D Hartree/Fock extraction paths
+over `L=4:2:14` by default and writes machine-readable samples, summaries,
+bond dimensions, and process-memory information. It is intended for a
+separate CPU cluster run, not routine development.
+
+```bash
+mkdir -p benchmark_results/manual
+bash benchmark/run_extraction_scaling.sh benchmark_results/manual
+```
+
+The Slurm template is
+[`benchmark/extraction_scaling.slurm`](benchmark/extraction_scaling.slurm).
+Set its account, QoS, module name, and `JULIA_DEPOT_PATH` appropriately before
+submitting it. Read the generated `README.md`, `samples.csv`, `summary.csv`,
+and `process_time.txt` together: peak RSS is process-wide, while the CSVs hold
+per-method timing and allocation data.
+
+## Current limitations
+
+- Open boundaries only; no periodic-boundary implementation.
+- Spinless, real scalar nearest-neighbour `U` only; no multiorbital, spin,
+  long-range, or spatially varying interaction model.
+- The present exchange functional keeps only the real nearest-neighbour bond
+  order; complex exchange physics is not represented.
+- `:sp2` can stagnate under MPO truncation in some finite-gap square cases.
+  Check `PurificationResult` and do not rely on a convergence flag alone.
+- Exact spectral-bound validation is a small-system diagnostic, not a scalable
+  bound estimator. Production calculations need conservative externally
+  justified bounds.
+- GPU movement hooks exist in `run_scf!`, but the maintained validation and
+  benchmark workflow is CPU-first. Treat GPU use as experimental until it has
+  its own validation run.
+
+## Repository map
+
+```text
+src/
+  core/            Parameter types, system state, and operators
+  hamiltonians/    Open-chain and open-square MPO Hamiltonian construction
+  purification/    Initial scaling, SP2, direct McWeeny, and PM backends
+  tci/             TCI and tensorial mean-field extraction
+  hf/              Self-consistent-field driver and diagnostics
+  utils/           Quantics helpers, progress, energies, and observables
+test/              Small-system, dense-reference, and regression tests
+benchmark/         CPU scaling and cluster-job scripts
+```
+
+For the active scientific and implementation roadmap, see
+[`../docs/plans/remaining_implementation_priorities.md`](../docs/plans/remaining_implementation_priorities.md).
