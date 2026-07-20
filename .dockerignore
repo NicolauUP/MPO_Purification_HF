@@ -1,0 +1,8 @@
+.git
+.gitignore
+.cluster_depot
+benchmark_results
+*.tar.gz
+*.h5
+qtt_*.out
+qtt_*.err
