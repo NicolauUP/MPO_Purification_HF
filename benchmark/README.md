@@ -7,21 +7,21 @@ calculation.
 
 ## Cluster preflight
 
-First run a small case to confirm the cluster environment and output path:
+First submit a small case to confirm the cluster environment and output path.
+Do not run Julia directly on a login node.
 
 ```bash
 cd /gpfs/projects/epor78/MPO_HartreeFock_Purification/MPO_Purification_HF
 export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
 mkdir -p "$MPO_BENCHMARK_ROOT"
 
-bash benchmark/run_extraction_scaling.sh \
-  "$MPO_BENCHMARK_ROOT/preflight" \
+sbatch benchmark/extraction_scaling.slurm \
   --levels 4,6 --sources smooth --warmups 1 \
   --repetitions-small 1 --repetitions-large 1
 ```
 
-This is intentionally a direct command, not a full Slurm benchmark. It
-creates a small result directory and verifies that all four extractors can run.
+This creates `extraction_<job-id>/` under the external benchmark root and
+verifies that all four extractors can run on an allocated compute node.
 
 ## Full cluster benchmark
 

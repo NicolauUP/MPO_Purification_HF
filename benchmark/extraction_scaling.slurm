@@ -36,4 +36,7 @@ echo "Julia executable: $(command -v julia)"
 julia --version
 echo "Julia threads: $JULIA_NUM_THREADS"
 
-bash benchmark/run_extraction_scaling.sh "$OUTPUT_DIR"
+# Forward arguments supplied after the Slurm script name to the Julia
+# benchmark, allowing a small preflight and the default full benchmark to use
+# the same resource-safe wrapper.
+bash benchmark/run_extraction_scaling.sh "$OUTPUT_DIR" "$@"
