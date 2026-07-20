@@ -179,10 +179,13 @@ if abspath(PROGRAM_FILE) == @__FILE__
     if isnothing(configuration)
         print_usage()
     else
-        _write_report(stdout, configuration)
+        buffer = IOBuffer()
+        _write_report(buffer, configuration)
+        report = String(take!(buffer))
+        print(stdout, report)
         if !isnothing(configuration.output)
             open(configuration.output, "w") do io
-                _write_report(io, configuration)
+                print(io, report)
             end
             println("Report written to $(abspath(configuration.output))")
         end
