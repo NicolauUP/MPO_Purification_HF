@@ -28,6 +28,10 @@
 
     tensorial_hartree = dense_matrix(extract_hartree_mpo_tensorial_square(sys), sys)
     @test tensorial_hartree ≈ hartree atol=1e-10
+
+    carry_hartree = dense_matrix(extract_hartree_mpo_binary_carry_square(sys), sys)
+    @test carry_hartree ≈ expected atol=1e-10
+    @test opnorm(carry_hartree - carry_hartree') < 1e-12
 end
 
 @testset "P1.3 square horizontal Fock dense reference" begin

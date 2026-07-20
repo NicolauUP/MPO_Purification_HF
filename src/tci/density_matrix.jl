@@ -256,6 +256,113 @@ function extract_hartree_mpo_binary_carry_1d(sys::System)
 end
 
 """
+    _shift_qtt_tensors_binary_carry_square(tensors, sites, direction)
+
+Shift a diagonal QTT field by one open-square neighbour without forming a
+translation MPO. Square coordinates use the established interleaved bit order
+`(y₀, x₀, y₁, x₁, …)`: horizontal shifts carry through the `x` bits (Julia
+site positions `2, 4, …`), vertical shifts through `y` bits (`1, 3, …`). The
+other coordinate's bits transmit the carry state unchanged. Overflow and
+underflow are discarded at the physical square boundary.
+"""
+function _shift_qtt_tensors_binary_carry_square(
+    tensors::Vector{ITensor},
+    sites::Vector{<:Index},
+    direction::Symbol,
+)
+    length(tensors) == length(sites) || throw(ArgumentError(
+        "tensor and site counts must agree",
+    ))
+    L = length(sites)
+    iseven(L) || throw(ArgumentError("square QTT shift requires an even number of sites"))
+    direction in (:right, :left, :up, :down) || throw(ArgumentError(
+        "square direction must be :right, :left, :up, or :down; got $direction",
+    ))
+
+    horizontal = direction in (:right, :left)
+    binary_direction = direction in (:right, :up) ? :right : :left
+    active_site(site_number) = horizontal ? iseven(site_number) : isodd(site_number)
+    carries = [Index(2, "SquareHartreeCarry,link=$link") for link in 1:(L - 1)]
+    shifted = Vector{ITensor}(undef, L)
+
+    for site_number in 1:L
+        site = sites[site_number]
+        local_tensor = nothing
+        is_active = active_site(site_number)
+        for output_bit in 0:1, carry_in in 0:1
+            input_bit, carry_out = if is_active
+                _binary_shift_transition(output_bit, carry_in, binary_direction)
+            else
+                output_bit, carry_in
+            end
+
+            # The carry begins at the most-significant bit of the selected
+            # coordinate. When the final QTT site belongs to the other axis,
+            # it injects that initial carry into the next (active) site.
+            if site_number == L
+                is_active ? carry_in == 1 || continue : carry_out == 1 || continue
+            end
+            # The carry must vanish below the least-significant selected bit.
+            # For a horizontal shift that bit is site 2, so site 1 consumes
+            # the final zero carry without changing its (y) bit.
+            if site_number == 1
+                is_active ? carry_out == 0 || continue : carry_in == 0 || continue
+            end
+
+            term = tensors[site_number] * onehot(site => input_bit + 1)
+            term *= onehot(site => output_bit + 1)
+            site_number > 1 && (term *= onehot(carries[site_number - 1] => carry_out + 1))
+            site_number < L && (term *= onehot(carries[site_number] => carry_in + 1))
+            local_tensor = isnothing(local_tensor) ? term : local_tensor + term
+        end
+        shifted[site_number] = local_tensor
+    end
+
+    for site_number in 1:(L - 1)
+        density_link = commonind(tensors[site_number], tensors[site_number + 1])
+        fuse_links = combiner(density_link, carries[site_number])
+        shifted[site_number] *= fuse_links
+        shifted[site_number + 1] *= ITensors.dag(fuse_links)
+    end
+    return shifted
+end
+
+"""
+    extract_hartree_mpo_binary_carry_square(sys)
+
+Construct the open-square nearest-neighbour Hartree field by projecting the
+density diagonal once and applying exact binary-carry shifts along interleaved
+`x` and `y` QTT bits. It avoids generic translation-MPO products, so a missing
+physical neighbour is represented by a discarded carry overflow/underflow
+rather than a truncation-sensitive boundary mask.
+"""
+function extract_hartree_mpo_binary_carry_square(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_hartree_mpo_binary_carry_square requires ParametersSquare",
+    ))
+    params = sys.params
+    iszero(params.U) && return zero_mpo(sys.sites)
+    density_tensors = _density_diagonal_qtt_tensors(sys.ρ, sys.sites)
+    shifted = (
+        _shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :right),
+        _shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :left),
+        _shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :up),
+        _shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :down),
+    )
+    fields = map(tensors -> _diagonal_mpo_from_qtt_tensors(
+        tensors, sys.sites, params; symmetrize=false,
+    ), shifted)
+    hartree = +(map(field -> params.U * field, fields)...;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    return +(0.5 * hartree, 0.5 * ITensors.dag(hartree);
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+end
+
+"""
     extract_fock_mpo_binary_carry_1d(sys)
 
 Experimental 1D Fock extractor. It contracts `rho[i, i + 1]` directly with a
