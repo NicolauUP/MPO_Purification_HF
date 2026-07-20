@@ -37,12 +37,14 @@ end
     @test half_filled.method == :mcweeny_mu
     @test half_filled.target_particles === nothing
     @test half_filled.trace_error === nothing
+    @test half_filled.idempotency_residual < 1e-6
     @test isapprox(tr(rho_half), 2.0; atol=1e-6, rtol=1e-6)
     @test opnorm(rho_half - exact_occupied_projector(H, 2)) < 2e-3
 
     one_particle = mcweeny_mu_result(sys, params, bounds, -1.0)
     rho_one = dense_matrix(one_particle.rho, sys)
     @test one_particle.converged
+    @test one_particle.idempotency_residual < 1e-6
     @test isapprox(tr(rho_one), 1.0; atol=1e-6, rtol=1e-6)
     @test opnorm(rho_one - exact_occupied_projector(H, 1)) < 2e-3
 

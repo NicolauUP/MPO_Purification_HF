@@ -12,10 +12,14 @@ function perform_purification_mcweeny_mu(rho::MPO, params::AbstractModelParamete
     isnothing(spectral_bounds) && throw(ArgumentError("method=:mcweeny_mu requires spectral_bounds"))
     bounds = validate_spectral_bounds(spectral_bounds...)
     bounds[1] < chemical_potential < bounds[2] || throw(ArgumentError("chemical_potential must lie inside spectral_bounds"))
+    # `:mcweeny_mu` has no prescribed particle number to check independently.
+    # A 1e-3 idempotency residual can still leave O(1e-5) occupation errors on
+    # small finite systems, so require the next cubic-convergence regime.
+    idempotency_tolerance = 1e-6
     for iteration in 1:params.purification_steps
         P2 = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         idem = idempotency_residual(rho, P2)
-        if idem < 1e-3
+        if idem < idempotency_tolerance
             return purification_result(rho, params; method=:mcweeny_mu, converged=true, termination_reason=:idempotency_threshold, iterations=iteration, spectral_bounds=bounds, spectral_bounds_validation=spectral_bounds_validation, target_particles=nothing)
         end
         P3 = apply(rho, P2; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
