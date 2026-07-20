@@ -1,21 +1,22 @@
 # Square-lattice extraction benchmark
 
-This benchmark measures the implemented open-square mean-field extractors on
+This benchmark measures the open-square **binary-carry Hartree** extractor on
 `2^L_side × 2^L_side` lattices. Thus `L_side=10` means `L_total=20` QTT bits
 and `N=1,048,576` sites.
 
 It is deliberately not a full SCF calculation. Density preparation happens
 outside the timed region. The timed kernels are:
 
-- `hartree_tci` — current TCI-based square Hartree field;
-- `hartree_tensorial` — experimental translation-based Hartree field;
-- `fock_horizontal` and `fock_vertical` — the two implemented TCI Fock
-  components, measured separately.
+- `hartree_binary_carry` — a direct interleaved-QTT carry construction for
+  the four open-square neighbour-density shifts.
 
-There is currently no square binary-carry Fock implementation, so this is not
-a comparison of that 1D prototype. The two Hartree implementations are compared
-as MPOs; Fock has no independent large-system implementation yet and is
-reported for runtime, allocations, Hermiticity, and sampled physical bonds.
+For every result, the benchmark measures the Hartree value directly from the
+density MPO at four corners and one bulk site. `summary.csv` records the
+maximum and mean absolute error of those probes. This is the accuracy
+diagnostic; it does not rely on agreement with another reconstructed MPO.
+
+There is currently no square binary-carry Fock implementation. This benchmark
+therefore makes no Fock performance or accuracy claim.
 
 ## Cluster preflight
 
@@ -48,5 +49,6 @@ sbatch benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
 
 The Slurm job has one Julia process and one CPU thread. Its `process_time.txt`
 reports whole-process peak RSS; `samples.csv` contains per-kernel time and
-allocation measurements. Inspect `errors.csv` before interpreting any later
-rows: failed cases are recorded and the remaining grid continues.
+allocation measurements. Inspect `errors.csv` and the direct-probe error
+columns before interpreting any performance result: failed cases are recorded
+and the remaining grid continues.

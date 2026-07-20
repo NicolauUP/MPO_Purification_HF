@@ -91,35 +91,37 @@ function _system(source::Symbol, total_bits::Int)
     throw(ArgumentError("unknown source $source"))
 end
 
-const KERNELS = (
-    (:hartree_tci, extract_hartree_mpo_square),
-    (:hartree_tensorial, extract_hartree_mpo_tensorial_square),
-    (:fock_horizontal, extract_fock_mpo_square_horizontal),
-    (:fock_vertical, extract_fock_mpo_square_vertical),
-)
+const KERNELS = ((:hartree_binary_carry, extract_hartree_mpo_binary_carry_square),)
 
-function _samples(field::MPO, sys::System, kind::Symbol)
+function _probe_coordinates(side::Int)
+    unique(((0, 0), (side - 1, 0), (0, side - 1), (side - 1, side - 1),
+        (div(side, 2), div(side, 2))))
+end
+
+function _direct_hartree(sys::System, site::Int)
+    params = sys.params
+    sum(
+        real(MatrixChecker(sys.ρ, sys.sites, neighbour, neighbour, sys.bra_states, sys.ket_states))
+        for neighbour in values(square_neighbours(site, params.L))
+        if !isnothing(neighbour)
+    ) * params.U
+end
+
+function _direct_probe_diagnostics(field::MPO, sys::System)
     L = sys.params.L
     side = 2 ^ div(L, 2)
-    coordinates = kind == :hartree_tci || kind == :hartree_tensorial ?
-        ((0, 0), (div(side, 2), div(side, 2)), (side - 1, side - 1)) :
-        kind == :fock_horizontal ? ((0, 0), (max(0, div(side, 2) - 1), div(side, 2)), (side - 2, side - 1)) :
-        ((0, 0), (div(side, 2), max(0, div(side, 2) - 1)), (side - 1, side - 2))
+    coordinates = _probe_coordinates(side)
     values = String[]
+    errors = Float64[]
     for (x, y) in coordinates
         site = square_lattice_index(x, y, L)
-        value = if kind == :hartree_tci || kind == :hartree_tensorial
-            MatrixChecker(field, sys.sites, site, site, sys.bra_states, sys.ket_states)
-        elseif kind == :fock_horizontal
-            neighbour = square_neighbours(site, L).right
-            MatrixChecker(field, sys.sites, site, neighbour, sys.bra_states, sys.ket_states)
-        else
-            neighbour = square_neighbours(site, L).up
-            MatrixChecker(field, sys.sites, site, neighbour, sys.bra_states, sys.ket_states)
-        end
-        push!(values, @sprintf("(%d,%d):%.16e%+.16ei", x, y, real(value), imag(value)))
+        direct = _direct_hartree(sys, site)
+        observed = real(MatrixChecker(field, sys.sites, site, site, sys.bra_states, sys.ket_states))
+        push!(errors, abs(observed - direct))
+        push!(values, @sprintf("(%d,%d):direct=%.16e;carry=%.16e;error=%+.3e",
+            x, y, direct, observed, observed - direct))
     end
-    join(values, ';')
+    return maximum(errors), sum(errors) / length(errors), join(values, ';')
 end
 
 function _time_kernel(kernel, sys, warmups, repetitions)
@@ -190,7 +192,7 @@ function run_benchmark(; output, side_levels, sources, warmups, repetitions_smal
     open(joinpath(output, "samples.csv"), "w") do samples
         _row(samples, ("source", "L_side", "L_total", "N", "kernel", "repetition", "time_s", "allocations_bytes", "gc_time_s", "rho_max_chi", "rho_mean_chi", "field_max_chi", "field_mean_chi", "hermiticity_residual"))
         open(joinpath(output, "summary.csv"), "w") do summary
-            _row(summary, ("source", "source_details", "L_side", "L_total", "N", "kernel", "repetitions", "median_time_s", "minimum_time_s", "median_allocations_bytes", "median_gc_time_s", "rho_max_chi", "rho_mean_chi", "median_field_max_chi", "median_field_mean_chi", "hermiticity_residual", "hartree_relative_difference_to_tci", "sample_coefficients"))
+            _row(summary, ("source", "source_details", "L_side", "L_total", "N", "kernel", "repetitions", "median_time_s", "minimum_time_s", "median_allocations_bytes", "median_gc_time_s", "rho_max_chi", "rho_mean_chi", "median_field_max_chi", "median_field_mean_chi", "hermiticity_residual", "direct_probe_max_abs_error", "direct_probe_mean_abs_error", "direct_probe_values"))
             open(joinpath(output, "errors.csv"), "w") do errors
                 _row(errors, ("source", "L_side", "L_total", "stage", "error"))
                 for source in sources, side_level in side_levels
@@ -209,15 +211,15 @@ function run_benchmark(; output, side_levels, sources, warmups, repetitions_smal
                                 _row(samples, (label, side_level, total_bits, N, name, item.repetition, item.time_s, item.bytes, item.gc_time_s, maxlinkdim(sys.ρ), _mean_chi(sys.ρ), item.max_chi, item.mean_chi, item.hermiticity))
                             end
                         end
-                        hartree_difference = _relative_difference(results[:hartree_tensorial][end].field, results[:hartree_tci][end].field, sys.params)
                         for (name, _) in KERNELS
                             measurements = results[name]
+                            direct_max_error, direct_mean_error, direct_values = _direct_probe_diagnostics(measurements[end].field, sys)
                             _row(summary, (label, details, side_level, total_bits, N, name, repetitions,
                                 _median([item.time_s for item in measurements]), minimum(item.time_s for item in measurements),
                                 _median([item.bytes for item in measurements]), _median([item.gc_time_s for item in measurements]),
                                 maxlinkdim(sys.ρ), _mean_chi(sys.ρ), _median([item.max_chi for item in measurements]),
                                 _median([item.mean_chi for item in measurements]), _median([item.hermiticity for item in measurements]),
-                                hartree_difference, _samples(measurements[end].field, sys, name)))
+                                direct_max_error, direct_mean_error, direct_values))
                         end
                         flush(samples); flush(summary)
                     catch error
