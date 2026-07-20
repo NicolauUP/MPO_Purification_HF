@@ -39,8 +39,13 @@ end
     @test limited.termination_reason == :max_iterations
 
     # Same width, distinct positive Fermi gaps: both must select the exact rank-2 projector.
-    for gap_values in ((-2.0, -1.0, 1.0, 2.0), (-2.0, -1e-3, 1e-3, 2.0))
-        sys, H, result = sp2_diagonal_result(gap_values, 2; steps=35)
+    # The 2e-3 gap needs 45 SP2 polynomials; it is finite, unlike the exactly
+    # degenerate case above, so it must converge when given that budget.
+    for (gap_values, steps) in (
+        ((-2.0, -1.0, 1.0, 2.0), 35),
+        ((-2.0, -1e-3, 1e-3, 2.0), 45),
+    )
+        sys, H, result = sp2_diagonal_result(gap_values, 2; steps)
         @test result.converged
         @test opnorm(dense_matrix(result.rho, sys) - exact_occupied_projector(H, 2)) < 2e-3
     end
