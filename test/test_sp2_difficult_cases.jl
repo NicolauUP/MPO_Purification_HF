@@ -30,11 +30,17 @@ end
         @test opnorm(rho - exact_occupied_projector(H, Ne)) < 2e-3
     end
 
-    _, _, degenerate = sp2_diagonal_result((-1.0, 0.0, 0.0, 1.0), 2; steps=20)
+    degenerate_result = @test_logs (:warn, r"SP2 purification did not converge") begin
+        sp2_diagonal_result((-1.0, 0.0, 0.0, 1.0), 2; steps=20)
+    end
+    _, _, degenerate = degenerate_result
     @test !degenerate.converged
     @test degenerate.termination_reason in (:stagnation, :max_iterations)
 
-    _, _, limited = sp2_diagonal_result(values, 2; steps=1)
+    limited_result = @test_logs (:warn, r"SP2 purification did not converge") begin
+        sp2_diagonal_result(values, 2; steps=1)
+    end
+    _, _, limited = limited_result
     @test !limited.converged
     @test limited.termination_reason == :max_iterations
 
