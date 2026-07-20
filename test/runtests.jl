@@ -38,3 +38,5 @@ include("test_mcweeny_mu.jl")
 include("test_progress_output.jl")
 include("test_cleanup_policy.jl")
 include("test_end_to_end_regressions.jl")
+
+println("All MPO_MeanField tests completed successfully.")
