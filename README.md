@@ -83,9 +83,10 @@ Load it with:
 using MPO_MeanField
 ```
 
-The current project environment includes CUDA and plotting-related packages,
-although the maintained solver workflow is CPU-first. A networked machine is
-normally required for the first `Pkg.instantiate()`.
+The maintained solver workflow is CPU-first. CUDA remains in the project
+environment for planned GPU work, but the current core package does not load a
+graphics backend. A networked machine is normally required for the first
+`Pkg.instantiate()`.
 
 ### Offline HPC environment
 
