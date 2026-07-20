@@ -1,0 +1,8 @@
+# Results must live under $MPO_RESULTS_ROOT, outside this source tree.
+*.out
+*.err
+*.log
+*.csv
+*.toml
+*.h5
+*.hdf5
