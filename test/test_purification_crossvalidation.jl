@@ -40,9 +40,13 @@ end
             density=0.5,
             purification_steps=30,
         )),
-        ("2D square L=4, noninteracting", parameters_square(
+        ("2D square L=4, noninteracting (nondegenerate reference)", parameters_square(
             t=(-0.6, -0.35),
-            W=(x, y) -> 0.11x + 0.07y,
+            # This deliberately matches the non-interacting square SCF reference.
+            # The bilinear term lifts the accidental near-degeneracy at the
+            # half-filled Fermi level, so an exact occupied projector is a
+            # well-defined target for both canonical purification schemes.
+            W=(x, y) -> 0.11x + 0.07y + 0.013x * y,
             U=0.0,
             density=0.5,
             purification_steps=35,
