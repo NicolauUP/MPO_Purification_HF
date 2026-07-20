@@ -31,6 +31,20 @@ function crossvalidate_purification(params)
     return H, pm, dense_matrix(pm.rho, pm_sys), sp2, dense_matrix(sp2.rho, sp2_sys)
 end
 
+function finite_gap_square_sp2_regression()
+    params = parameters_square(
+        t=(-0.6, -0.35),
+        W=(x, y) -> 0.11x + 0.07y,
+        U=0.0,
+        density=0.5,
+        purification_steps=35,
+        itensors_maxdim=64,
+    )
+    H, pm, rho_pm, sp2, rho_sp2 = crossvalidate_purification(params)
+    Ne = round(Int, size(H, 1) * params.density)
+    return H, Ne, pm, rho_pm, sp2, rho_sp2
+end
+
 @testset "M3.4 PM/SP2 scientific cross-validation" begin
     cases = (
         ("1D diagonal, zero hopping", parameters_1d(
@@ -95,5 +109,25 @@ end
             @test opnorm(H * rho_sp2 - rho_sp2 * H) < 1e-7
             @test isapprox(real(tr(H * rho_sp2)), real(tr(H * exact)); atol=3e-3, rtol=3e-3)
         end
+    end
+
+    @testset "2D square L=4, finite-gap SP2 MPO regression" begin
+        H, Ne, pm, rho_pm, sp2, rho_sp2 = finite_gap_square_sp2_regression()
+        spectrum = eigvals(Hermitian((H + H') / 2))
+        fermi_gap = spectrum[Ne + 1] - spectrum[Ne]
+        exact = exact_occupied_projector(H, Ne)
+
+        # This is a finite-gap problem, rather than an intrinsically ambiguous
+        # degenerate Fermi-level projector. PM remains the reference result.
+        @test fermi_gap > 0.1
+        @test pm.converged
+        @test opnorm(rho_pm - exact) < 3e-3
+
+        # Current MPO-SP2 stagnates despite the finite gap. Keep this visible as
+        # an expected failure until the truncation/branch-stagnation mechanism
+        # is corrected; an unexpected pass requires revisiting these checks.
+        @test_broken sp2.converged
+        @test_broken isapprox(tr(rho_sp2), Ne; atol=1e-6, rtol=1e-6)
+        @test_broken opnorm(H * rho_sp2 - rho_sp2 * H) < 1e-7
     end
 end
