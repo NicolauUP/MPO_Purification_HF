@@ -8,7 +8,7 @@ using Printf
 using SHA
 
 const DEFAULT_SIDE_LEVELS = Tuple(2:10)
-const DEFAULT_SOURCES = (:smooth, :sp2_gapped)
+const DEFAULT_SOURCES = (:smooth, :checkerboard_exact)
 
 _csv(value) = "\"" * replace(string(value), '"' => "\"\"") * "\""
 _row(io, values) = println(io, join(_csv.(values), ','))
@@ -71,6 +71,29 @@ function _smooth_system(total_bits::Int)
     return sys, "deterministic_smooth_synthetic", "not_applicable"
 end
 
+"""Exact, bounded checkerboard CDW density used to isolate Hartree extraction.
+
+This is deliberately a density input, not the result of an SP2 or SCF solve:
+the benchmark measures the field kernels even when current square-MPO SP2
+stagnates. It has the physical bounds `0 <= n(x,y) <= 1` and a compact QTT
+description at every benchmark size.
+"""
+function _checkerboard_exact_system(total_bits::Int)
+    params = _params(total_bits)
+    delta = 0.2
+    sys = System(params)
+    sys.ρ = MPO_MeanField.diagonal_mpo_from_function(
+        z -> begin
+            x, y = square_lattice_decoder(Int(z), total_bits)
+            0.5 + (iseven(x + y) ? delta : -delta)
+        end,
+        Float64,
+        sys.sites,
+        params.tci_tol,
+    )
+    return sys, "exact_checkerboard_cdw", @sprintf("n=0.5%+.3f*(-1)^(x+y)", delta)
+end
+
 function _sp2_system(total_bits::Int)
     params = _params(total_bits; staggered=true)
     sys = System(params)
@@ -87,11 +110,15 @@ end
 
 function _system(source::Symbol, total_bits::Int)
     source == :smooth && return _smooth_system(total_bits)
+    source == :checkerboard_exact && return _checkerboard_exact_system(total_bits)
     source == :sp2_gapped && return _sp2_system(total_bits)
     throw(ArgumentError("unknown source $source"))
 end
 
-const KERNELS = ((:hartree_binary_carry, extract_hartree_mpo_binary_carry_square),)
+const KERNELS = (
+    (:hartree_four_carry, extract_hartree_mpo_binary_carry_square),
+    (:hartree_adjacency, extract_hartree_mpo_binary_carry_square_adjacency),
+)
 
 function _probe_coordinates(side::Int)
     unique(((0, 0), (side - 1, 0), (0, side - 1), (side - 1, side - 1),
@@ -107,7 +134,7 @@ function _direct_hartree(sys::System, site::Int)
     ) * params.U
 end
 
-function _direct_probe_diagnostics(field::MPO, sys::System)
+function _direct_probe_diagnostics(field::MPO, sys::System, kernel::Symbol)
     L = sys.params.L
     side = 2 ^ div(L, 2)
     coordinates = _probe_coordinates(side)
@@ -118,8 +145,8 @@ function _direct_probe_diagnostics(field::MPO, sys::System)
         direct = _direct_hartree(sys, site)
         observed = real(MatrixChecker(field, sys.sites, site, site, sys.bra_states, sys.ket_states))
         push!(errors, abs(observed - direct))
-        push!(values, @sprintf("(%d,%d):direct=%.16e;carry=%.16e;error=%+.3e",
-            x, y, direct, observed, observed - direct))
+        push!(values, @sprintf("(%d,%d):direct=%.16e;%s=%.16e;error=%+.3e",
+            x, y, direct, kernel, observed, observed - direct))
     end
     return maximum(errors), sum(errors) / length(errors), join(values, ';')
 end
@@ -213,7 +240,7 @@ function run_benchmark(; output, side_levels, sources, warmups, repetitions_smal
                         end
                         for (name, _) in KERNELS
                             measurements = results[name]
-                            direct_max_error, direct_mean_error, direct_values = _direct_probe_diagnostics(measurements[end].field, sys)
+                            direct_max_error, direct_mean_error, direct_values = _direct_probe_diagnostics(measurements[end].field, sys, name)
                             _row(summary, (label, details, side_level, total_bits, N, name, repetitions,
                                 _median([item.time_s for item in measurements]), minimum(item.time_s for item in measurements),
                                 _median([item.bytes for item in measurements]), _median([item.gc_time_s for item in measurements]),
@@ -237,7 +264,7 @@ end
 function print_usage()
     println("Usage: julia --project=. benchmark/extraction_scaling_2d/extraction_scaling_2d.jl --output DIRECTORY [options]")
     println("  --side-levels 2,3,...,10  (side=2^L_side; total bits=2L_side)")
-    println("  --sources smooth,sp2_gapped")
+    println("  --sources smooth,checkerboard_exact,sp2_gapped")
     println("  --warmups N --repetitions-small N --repetitions-large N")
 end
 

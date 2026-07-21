@@ -329,6 +329,86 @@ function _shift_qtt_tensors_binary_carry_square(
 end
 
 """
+    square_neighbour_adjacency_mpo(sites)
+
+Return the exact QTT/MPO representation of the open-square nearest-neighbour
+adjacency operator
+
+```math
+A_{\\mathrm{nn}} = S_x^+ + S_x^- + S_y^+ + S_y^- .
+```
+
+The virtual state is `(direction, carry)`: four direction branches and the
+binary carry/borrow required by each branch. This produces the four-neighbour
+sum in one MPO--MPS application, rather than forming four shifted fields and
+compressing their MPO sum. Tensor order is most- to least-significant QTT bit,
+with the established interleaved square convention `(y₀, x₀, y₁, x₁, ...)`.
+"""
+function square_neighbour_adjacency_mpo(sites::Vector{<:Index})
+    L = length(sites)
+    iseven(L) || throw(ArgumentError(
+        "square QTT adjacency requires an even number of sites",
+    ))
+    directions = (:right, :left, :up, :down)
+    state_links = [Index(8, "SquareAdjacencyState,link=$link") for link in 1:(L - 1)]
+    adjacency = MPO(L)
+
+    for site_number in 1:L
+        site = sites[site_number]
+        output_site = prime(site)
+        local_tensor = nothing
+        for (direction_number, direction) in enumerate(directions)
+            horizontal = direction in (:right, :left)
+            binary_direction = direction in (:right, :up) ? :right : :left
+            active = horizontal ? isodd(site_number) : iseven(site_number)
+            for output_bit in 0:1, carry_in in 0:1
+                input_bit, carry_out = active ? _binary_shift_transition(
+                    output_bit, carry_in, binary_direction,
+                ) : (output_bit, carry_in)
+
+                # At the least-significant physical coordinate bit, seed the
+                # increment/decrement with one. At the most-significant bit,
+                # retain only paths whose carry has vanished, which exactly
+                # enforces the open boundary.
+                site_number == L && carry_in != 1 && continue
+                site_number == 1 && carry_out != 0 && continue
+
+                term = onehot(output_site => output_bit + 1)
+                term *= onehot(site => input_bit + 1)
+                site_number > 1 && (term *= onehot(
+                    state_links[site_number - 1] => 2 * (direction_number - 1) + carry_out + 1,
+                ))
+                site_number < L && (term *= onehot(
+                    state_links[site_number] => 2 * (direction_number - 1) + carry_in + 1,
+                ))
+                local_tensor = isnothing(local_tensor) ? term : local_tensor + term
+            end
+        end
+        adjacency[site_number] = local_tensor
+    end
+    return adjacency
+end
+
+"""
+    _apply_square_neighbour_adjacency(tensors, sites)
+
+Apply [`square_neighbour_adjacency_mpo`](@ref) without numerical truncation.
+The returned QTT tensors represent `A_nn * n`; truncating this application
+would defeat the purpose of avoiding the four-field MPO addition.
+"""
+function _apply_square_neighbour_adjacency(
+    tensors::Vector{ITensor},
+    sites::Vector{<:Index},
+)
+    density = MPS(tensors)
+    field = apply(square_neighbour_adjacency_mpo(sites), density;
+        cutoff=0.0,
+        maxdim=typemax(Int),
+    )
+    return copy(field.data)
+end
+
+"""
     extract_hartree_mpo_binary_carry_square(sys)
 
 Construct the open-square nearest-neighbour Hartree field by projecting the
@@ -361,6 +441,31 @@ function extract_hartree_mpo_binary_carry_square(sys::System)
         cutoff=params.itensors_tol,
         maxdim=params.itensors_maxdim,
     )
+end
+
+"""
+    extract_hartree_mpo_binary_carry_square_adjacency(sys)
+
+Experimental fused square Hartree extractor. It constructs the density
+diagonal once and evaluates `U * A_nn * n` in a single, untruncated QTT MPO--
+MPS application. Unlike [`extract_hartree_mpo_binary_carry_square`](@ref), it
+does not form or compress a generic sum of four global diagonal MPOs.
+
+This routine is intentionally opt-in until its bond dimensions and direct
+field accuracy have been benchmarked on production-representative densities.
+"""
+function extract_hartree_mpo_binary_carry_square_adjacency(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_hartree_mpo_binary_carry_square_adjacency requires ParametersSquare",
+    ))
+    params = sys.params
+    iszero(params.U) && return zero_mpo(sys.sites)
+    density_tensors = _density_diagonal_qtt_tensors(sys.ρ, sys.sites)
+    field_tensors = _apply_square_neighbour_adjacency(density_tensors, sys.sites)
+    field = _diagonal_mpo_from_qtt_tensors(
+        field_tensors, sys.sites, params; symmetrize=false,
+    )
+    return params.U * field
 end
 
 """

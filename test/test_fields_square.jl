@@ -33,6 +33,12 @@
     @test carry_hartree ≈ expected atol=1e-10
     @test opnorm(carry_hartree - carry_hartree') < 1e-12
 
+    adjacency_hartree = dense_matrix(
+        extract_hartree_mpo_binary_carry_square_adjacency(sys), sys,
+    )
+    @test adjacency_hartree ≈ expected atol=1e-10
+    @test opnorm(adjacency_hartree - adjacency_hartree') < 1e-12
+
     # Check each interleaved binary-carry direction separately. The final
     # Hartree sum alone could conceal a horizontal/vertical axis swap.
     density_tensors = MPO_MeanField._density_diagonal_qtt_tensors(sys.ρ, sys.sites)
@@ -66,6 +72,36 @@
             @test isapprox(observed_density, expected_density; atol=1e-10)
         end
     end
+end
+
+@testset "P1.2b square adjacency Hartree with exact checkerboard density" begin
+    params = parameters_square(L=4, U=0.7, S=nothing, itensors_tol=1e-12)
+    sys = System(params)
+    delta = 0.2
+    density = (x, y) -> 0.5 + (iseven(x + y) ? delta : -delta)
+    sys.ρ = MPO_MeanField.diagonal_mpo_from_function(
+        z -> begin
+            x, y = square_lattice_decoder(Int(z), params.L)
+            density(x, y)
+        end,
+        Float64,
+        sys.sites,
+        params.tci_tol,
+    )
+
+    expected = zeros(16, 16)
+    for site in 1:16
+        expected[site, site] = params.U * sum(
+            density(square_lattice_decoder(neighbour - 1, params.L)...)
+            for neighbour in values(square_neighbours(site, params.L))
+            if !isnothing(neighbour)
+        )
+    end
+    four_carry = dense_matrix(extract_hartree_mpo_binary_carry_square(sys), sys)
+    adjacency = dense_matrix(extract_hartree_mpo_binary_carry_square_adjacency(sys), sys)
+    @test four_carry ≈ expected atol=1e-10
+    @test adjacency ≈ expected atol=1e-10
+    @test adjacency ≈ four_carry atol=1e-10
 end
 
 @testset "P1.2a square binary-carry Hartree with checkerboard SP2 density" begin
