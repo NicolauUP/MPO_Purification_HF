@@ -108,6 +108,10 @@ function print_iteration_progress(
         flush(io)
     else
         println(io, message)
+        # Files used by long-running batch jobs are block-buffered. Flush every
+        # completed iteration so `tail -f progress.txt` remains useful while a
+        # purification or SCF calculation is still running.
+        flush(io)
     end
     return overwrite
 end

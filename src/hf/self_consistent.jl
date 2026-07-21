@@ -84,6 +84,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         println(io, "  Convergence Tolerance: $(sys.params.scf_tol)")
         println(io, "  Mixing Parameter: $(sys.params.scf_mixing)")
     end
+    verbose != :nothing && flush(io)
 
     sys.H0 = to_gpu(sys.H0)
     sys.VH = to_gpu(sys.VH)
