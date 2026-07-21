@@ -130,4 +130,31 @@ end
         @test_broken isapprox(tr(rho_sp2), Ne; atol=1e-6, rtol=1e-6)
         @test_broken opnorm(H * rho_sp2 - rho_sp2 * H) < 1e-7
     end
+
+    @testset "2D square L=4, finite-gap SP2 tight-cutoff recovery" begin
+        # The same affine finite-gap Hamiltonian as the expected-failure case
+        # above. At maxdim=64 the default failure is therefore not a bond-cap
+        # effect: reducing the MPO cutoff from 1e-12 to 1e-14 preserves the
+        # final trace-correction steps and recovers the dense-SP2 projector.
+        params = parameters_square(
+            t=(-0.6, -0.35),
+            W=(x, y) -> 0.11x + 0.07y,
+            U=0.0,
+            density=0.5,
+            purification_steps=35,
+            itensors_tol=1e-14,
+            itensors_maxdim=64,
+        )
+        H, _, _, sp2, rho_sp2 = crossvalidate_purification(params)
+        Ne = round(Int, size(H, 1) * params.density)
+        exact = exact_occupied_projector(H, Ne)
+        spectrum = eigvals(Hermitian((H + H') / 2))
+
+        @test spectrum[Ne + 1] - spectrum[Ne] > 0.1
+        @test sp2.converged
+        @test sp2.termination_reason == :idempotency_threshold
+        @test isapprox(tr(rho_sp2), Ne; atol=1e-6, rtol=1e-6)
+        @test opnorm(rho_sp2 - exact) < 3e-3
+        @test opnorm(H * rho_sp2 - rho_sp2 * H) < 1e-7
+    end
 end
