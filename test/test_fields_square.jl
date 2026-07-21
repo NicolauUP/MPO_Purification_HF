@@ -192,6 +192,7 @@ end
 
     rho = dense_matrix(sys.ρ, sys)
     fock = dense_matrix(extract_fock_mpo_square_horizontal(sys), sys)
+    carry_fock = dense_matrix(extract_fock_mpo_binary_carry_square_horizontal(sys), sys)
     expected = zeros(16, 16)
     for (site, right, orientation) in square_undirected_bonds(params.L)
         orientation == :horizontal || continue
@@ -200,6 +201,8 @@ end
     end
     @test opnorm(fock - expected) < 1e-10
     @test opnorm(fock - fock') < 1e-12
+    @test opnorm(carry_fock - expected) < 1e-10
+    @test opnorm(carry_fock - carry_fock') < 1e-12
 end
 
 @testset "P1.4 square vertical Fock dense reference" begin
@@ -229,6 +232,7 @@ end
 
     rho = dense_matrix(sys.ρ, sys)
     fock = dense_matrix(extract_fock_mpo_square_vertical(sys), sys)
+    carry_fock = dense_matrix(extract_fock_mpo_binary_carry_square_vertical(sys), sys)
     expected = zeros(16, 16)
     for (site, up, orientation) in square_undirected_bonds(params.L)
         orientation == :vertical || continue
@@ -237,6 +241,8 @@ end
     end
     @test opnorm(fock - expected) < 1e-10
     @test opnorm(fock - fock') < 1e-12
+    @test opnorm(carry_fock - expected) < 1e-10
+    @test opnorm(carry_fock - carry_fock') < 1e-12
 end
 
 @testset "P1.4a square SCF Fock selector" begin

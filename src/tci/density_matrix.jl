@@ -329,6 +329,80 @@ function _shift_qtt_tensors_binary_carry_square(
 end
 
 """
+    _density_neighbour_band_qtt_tensors_binary_carry_square(rho, sites, direction)
+
+Locally contract an interleaved square density MPO onto a forward nearest-
+neighbour band. `direction=:right` returns the QTT coefficient field
+`rho[(x,y), (x+1,y)]`; `direction=:up` returns
+`rho[(x,y), (x,y+1)]`. Open-boundary bonds have exactly zero coefficients.
+
+The carry acts only on the selected coordinate's QTT bits: odd Julia tensor
+positions for `:right` and even positions for `:up`. It is the square analogue
+of `_density_superdiagonal_qtt_tensors_binary_carry`, preserving the density
+matrix's row/column orientation until the caller applies the established
+real-exchange convention.
+"""
+function _density_neighbour_band_qtt_tensors_binary_carry_square(
+    rho::MPO,
+    sites::Vector{<:Index},
+    direction::Symbol,
+)
+    length(rho) == length(sites) || throw(ArgumentError(
+        "density MPO and site count must agree",
+    ))
+    L = length(sites)
+    iseven(L) || throw(ArgumentError("square QTT band extraction requires an even number of sites"))
+    direction in (:right, :up) || throw(ArgumentError(
+        "square Fock band direction must be :right or :up; got $direction",
+    ))
+
+    horizontal = direction == :right
+    active_site(site_number) = horizontal ? isodd(site_number) : iseven(site_number)
+    carries = [Index(2, "SquareFockCarry,link=$link") for link in 1:(L - 1)]
+    band = Vector{ITensor}(undef, L)
+
+    for site_number in 1:L
+        site = sites[site_number]
+        output_site = sim(site)
+        local_tensor = nothing
+        is_active = active_site(site_number)
+        for row_bit in 0:1, carry_in in 0:1
+            column_bit, carry_out = if is_active
+                _binary_shift_transition(row_bit, carry_in, :right)
+            else
+                row_bit, carry_in
+            end
+
+            # Inject the unit increment at the most-significant selected bit,
+            # then require it to vanish below the selected coordinate's least
+            # significant bit. The other axis only transports the carry.
+            if site_number == L
+                is_active ? carry_in == 1 || continue : carry_out == 1 || continue
+            end
+            if site_number == 1
+                is_active ? carry_out == 0 || continue : carry_in == 0 || continue
+            end
+
+            term = rho[site_number] * onehot(prime(site) => row_bit + 1)
+            term *= onehot(site => column_bit + 1)
+            term *= onehot(output_site => row_bit + 1)
+            site_number > 1 && (term *= onehot(carries[site_number - 1] => carry_out + 1))
+            site_number < L && (term *= onehot(carries[site_number] => carry_in + 1))
+            local_tensor = isnothing(local_tensor) ? term : local_tensor + term
+        end
+        band[site_number] = replaceind(local_tensor, output_site => site)
+    end
+
+    for site_number in 1:(L - 1)
+        density_link = commonind(rho[site_number], rho[site_number + 1])
+        fuse_links = combiner(density_link, carries[site_number])
+        band[site_number] *= fuse_links
+        band[site_number + 1] *= ITensors.dag(fuse_links)
+    end
+    return band
+end
+
+"""
     square_neighbour_adjacency_mpo(sites)
 
 Return the exact QTT/MPO representation of the open-square nearest-neighbour
@@ -464,6 +538,71 @@ function extract_hartree_mpo_binary_carry_square_adjacency(sys::System)
         field_tensors, sys.sites, params; symmetrize=false,
     )
     return params.U * field
+end
+
+"""
+    extract_fock_mpo_binary_carry_square_horizontal(sys)
+
+Experimental square horizontal Fock extractor. It obtains the right-directed
+band `rho[(x,y),(x+1,y)]` by a local interleaved binary carry, applies the
+current `-U * real(rho[i,j])` convention, and assembles the established
+Hermitian horizontal field. The cached-TCI extractor remains the SCF default
+until representative benchmarks establish a benefit.
+"""
+function extract_fock_mpo_binary_carry_square_horizontal(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_fock_mpo_binary_carry_square_horizontal requires ParametersSquare",
+    ))
+    params = sys.params
+    iszero(params.U) && return zero_mpo(sys.sites)
+    band_tensors = _density_neighbour_band_qtt_tensors_binary_carry_square(
+        sys.ρ, sys.sites, :right,
+    )
+    coefficients = -params.U * _diagonal_mpo_from_qtt_tensors(
+        band_tensors, sys.sites, params; symmetrize=true,
+    )
+    T_R, T_L, _, _ = sys.translations
+    right_term = apply(coefficients, T_R;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    left_term = apply(T_L, ITensors.dag(coefficients);
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    return +(right_term, left_term;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+end
+
+"""
+    extract_fock_mpo_binary_carry_square_vertical(sys)
+
+Experimental square vertical counterpart of
+[`extract_fock_mpo_binary_carry_square_horizontal`](@ref). It samples only
+the up-directed band `rho[(x,y),(x,y+1)]` and applies the same real-exchange
+and open-boundary conventions. It is opt-in and is not used by SCF yet.
+"""
+function extract_fock_mpo_binary_carry_square_vertical(sys::System)
+    sys.params isa ParametersSquare || throw(ArgumentError(
+        "extract_fock_mpo_binary_carry_square_vertical requires ParametersSquare",
+    ))
+    params = sys.params
+    iszero(params.U) && return zero_mpo(sys.sites)
+    band_tensors = _density_neighbour_band_qtt_tensors_binary_carry_square(
+        sys.ρ, sys.sites, :up,
+    )
+    coefficients = -params.U * _diagonal_mpo_from_qtt_tensors(
+        band_tensors, sys.sites, params; symmetrize=true,
+    )
+    _, _, T_U, T_D = sys.translations
+    up_term = apply(coefficients, T_U;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    down_term = apply(T_D, ITensors.dag(coefficients);
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
+    return +(up_term, down_term;
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+    )
 end
 
 """
