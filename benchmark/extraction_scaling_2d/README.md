@@ -117,6 +117,33 @@ Read `refinement.csv`: row zero is the normal SP2 stopping state, and rows
 1--8 are forced extra polynomials. Production source files and normal SP2
 behavior are unchanged by this diagnostic.
 
+## Large fixed-Hamiltonian SP2 ladder
+
+`sp2_fixed_hamiltonian_scaling_2d.jl` is the non-dense successor to the
+bounded diagnostics above. It uses a gapped noninteracting checkerboard square
+Hamiltonian and never runs SCF. For each requested `L_side` and density-MPO
+cap, it writes per-polynomial trace, idempotency, Hermiticity, branch, bond
+dimension, time, and allocation data to `iterations.csv`. Its final adjacency
+Hartree field is checked at five sites against direct measurements of that
+same final MPO density. This is an internal-invariant and resource study, not
+an exact validation at large size.
+
+The Slurm wrapper requests the full 112-core GPP node solely to obtain its
+memory allocation; Julia remains single-threaded. Start with the conservative
+`maxdim=256` resource preflight and only then submit higher caps separately.
+
+```bash
+export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
+sbatch --export=ALL,MPO_BENCHMARK_ROOT="$MPO_BENCHMARK_ROOT" \
+  benchmark/extraction_scaling_2d/sp2_fixed_hamiltonian_scaling_2d.slurm \
+  --side-levels 6,8,10 --maxdims 256 \
+  --itensors-tol 1e-14 --steps 50 --padding 0.5
+```
+
+Do not combine a large cap sweep into this first job. After it completes,
+inspect `errors.csv`, `summary.csv`, `iterations.csv`, and `process_time.txt`;
+then submit one cap at a time, for example `--side-levels 8,10 --maxdims 512`.
+
 ```bash
 export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
 sbatch benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
