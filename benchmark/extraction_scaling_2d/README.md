@@ -61,6 +61,21 @@ This performs SP2 plus both binary-carry extractions at each size, without SCF.
 Inspect `errors.csv`, direct-probe errors, and bond dimensions before advancing
 to `L_side=10`.
 
+To diagnose the known SP2 cutoff sensitivity at the first cluster-sized
+checkerboard case (`L_side=4`, i.e. a `16 x 16` lattice), pass the MPO cutoff
+explicitly:
+
+```bash
+sbatch --export=ALL,MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks \
+  benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
+  --side-levels 4 --sources sp2_gapped --itensors-tol 1e-14 \
+  --warmups 0 --repetitions-small 1 --repetitions-large 1
+```
+
+This is a diagnosis, not a production SCF run. Compare its `errors.csv` and
+SP2 source details with the corresponding `1e-12` run; do not infer a general
+production cutoff from one lattice size.
+
 ```bash
 export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
 sbatch benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \

@@ -29,18 +29,18 @@ end
 
 _hermiticity(field::MPO, params) = _relative_difference(field, ITensors.dag(field), params)
 
-function _params(total_bits::Int; staggered::Bool=false)
+function _params(total_bits::Int; staggered::Bool=false, itensors_tol::Float64=1e-12)
     ParametersSquare(
         L=total_bits, t=(-0.6, -0.35), U=0.3,
         W=staggered ? ((x, y) -> iseven(Int(x) + Int(y)) ? 0.6 : -0.6) : nothing,
-        S=nothing, tci_tol=1e-10, itensors_tol=1e-12, itensors_maxdim=128,
+        S=nothing, tci_tol=1e-10, itensors_tol=itensors_tol, itensors_maxdim=128,
         density=0.5, purification_steps=50, scf_mixing=0.5, scf_tol=0.1,
         scf_max_iterations=5,
     )
 end
 
-function _smooth_system(total_bits::Int)
-    params = _params(total_bits)
+function _smooth_system(total_bits::Int; itensors_tol::Float64=1e-12)
+    params = _params(total_bits; itensors_tol=itensors_tol)
     side = 2 ^ div(total_bits, 2)
     sys = System(params)
     diagonal = MPO_MeanField.diagonal_mpo_from_function(
@@ -78,8 +78,8 @@ the benchmark measures the field kernels even when current square-MPO SP2
 stagnates. It has the physical bounds `0 <= n(x,y) <= 1` and a compact QTT
 description at every benchmark size.
 """
-function _checkerboard_exact_system(total_bits::Int)
-    params = _params(total_bits)
+function _checkerboard_exact_system(total_bits::Int; itensors_tol::Float64=1e-12)
+    params = _params(total_bits; itensors_tol=itensors_tol)
     delta = 0.2
     sys = System(params)
     sys.ρ = MPO_MeanField.diagonal_mpo_from_function(
@@ -94,8 +94,8 @@ function _checkerboard_exact_system(total_bits::Int)
     return sys, "exact_checkerboard_cdw", @sprintf("n=0.5%+.3f*(-1)^(x+y)", delta)
 end
 
-function _sp2_system(total_bits::Int)
-    params = _params(total_bits; staggered=true)
+function _sp2_system(total_bits::Int; itensors_tol::Float64=1e-12)
+    params = _params(total_bits; staggered=true, itensors_tol=itensors_tol)
     sys = System(params)
     bounds = (-3.5, 3.5)
     initial = construct_rho_0(sys, params, bounds...; method=:sp2)
@@ -108,10 +108,10 @@ function _sp2_system(total_bits::Int)
     return sys, "noninteracting_gapped_sp2", details
 end
 
-function _system(source::Symbol, total_bits::Int)
-    source == :smooth && return _smooth_system(total_bits)
-    source == :checkerboard_exact && return _checkerboard_exact_system(total_bits)
-    source == :sp2_gapped && return _sp2_system(total_bits)
+function _system(source::Symbol, total_bits::Int; itensors_tol::Float64=1e-12)
+    source == :smooth && return _smooth_system(total_bits; itensors_tol=itensors_tol)
+    source == :checkerboard_exact && return _checkerboard_exact_system(total_bits; itensors_tol=itensors_tol)
+    source == :sp2_gapped && return _sp2_system(total_bits; itensors_tol=itensors_tol)
     throw(ArgumentError("unknown source $source"))
 end
 
@@ -176,13 +176,14 @@ end
 
 function parse_arguments(arguments)
     configuration = (output=nothing, side_levels=DEFAULT_SIDE_LEVELS, sources=DEFAULT_SOURCES,
-        warmups=1, repetitions_small=5, repetitions_large=3)
+        itensors_tol=1e-12, warmups=1, repetitions_small=5, repetitions_large=3)
     index = 1
     while index <= length(arguments)
         argument = arguments[index]
         argument == "--output" && (configuration = merge(configuration, (output=arguments[index + 1],)); index += 2; continue)
         argument == "--side-levels" && (configuration = merge(configuration, (side_levels=_parse_levels(arguments[index + 1]),)); index += 2; continue)
         argument == "--sources" && (configuration = merge(configuration, (sources=_parse_symbols(arguments[index + 1]),)); index += 2; continue)
+        argument == "--itensors-tol" && (configuration = merge(configuration, (itensors_tol=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--warmups" && (configuration = merge(configuration, (warmups=parse(Int, arguments[index + 1]),)); index += 2; continue)
         argument == "--repetitions-small" && (configuration = merge(configuration, (repetitions_small=parse(Int, arguments[index + 1]),)); index += 2; continue)
         argument == "--repetitions-large" && (configuration = merge(configuration, (repetitions_large=parse(Int, arguments[index + 1]),)); index += 2; continue)
@@ -191,6 +192,7 @@ function parse_arguments(arguments)
     end
     isnothing(configuration.output) && throw(ArgumentError("--output DIRECTORY is required"))
     all(level -> 1 <= level <= 10, configuration.side_levels) || throw(ArgumentError("side levels must lie in 1:10"))
+    isfinite(configuration.itensors_tol) && configuration.itensors_tol > 0 || throw(ArgumentError("itensors tolerance must be positive and finite"))
     configuration
 end
 
@@ -207,14 +209,15 @@ function _metadata(output, configuration)
         println(io, "side_levels=", join(configuration.side_levels, ','))
         println(io, "total_bits=", join((2level for level in configuration.side_levels), ','))
         println(io, "sources=", join(string.(configuration.sources), ','))
+        println(io, "itensors_tol=", configuration.itensors_tol)
         println(io, "note=peak RSS is process-global; see process_time.txt")
     end
 end
 
-function run_benchmark(; output, side_levels, sources, warmups, repetitions_small, repetitions_large)
+function run_benchmark(; output, side_levels, sources, itensors_tol, warmups, repetitions_small, repetitions_large)
     output = abspath(output)
     mkpath(output)
-    configuration = (; output, side_levels, sources, warmups, repetitions_small, repetitions_large)
+    configuration = (; output, side_levels, sources, itensors_tol, warmups, repetitions_small, repetitions_large)
     _metadata(output, configuration)
     open(joinpath(output, "samples.csv"), "w") do samples
         _row(samples, ("source", "L_side", "L_total", "N", "kernel", "repetition", "time_s", "allocations_bytes", "gc_time_s", "rho_max_chi", "rho_mean_chi", "field_max_chi", "field_mean_chi", "hermiticity_residual"))
@@ -228,7 +231,7 @@ function run_benchmark(; output, side_levels, sources, warmups, repetitions_smal
                     repetitions = side_level <= 5 ? repetitions_small : repetitions_large
                     println("source=$source L_side=$side_level L_total=$total_bits N=$N: preparing density")
                     try
-                        sys, label, details = _system(source, total_bits)
+                        sys, label, details = _system(source, total_bits; itensors_tol=itensors_tol)
                         results = Dict{Symbol,Vector{NamedTuple}}()
                         for (name, kernel) in KERNELS
                             println("source=$source L_side=$side_level kernel=$name: timing $repetitions repetitions")
@@ -265,6 +268,7 @@ function print_usage()
     println("Usage: julia --project=. benchmark/extraction_scaling_2d/extraction_scaling_2d.jl --output DIRECTORY [options]")
     println("  --side-levels 2,3,...,10  (side=2^L_side; total bits=2L_side)")
     println("  --sources smooth,checkerboard_exact,sp2_gapped")
+    println("  --itensors-tol 1e-12  (MPO cutoff; use 1e-14 for the SP2 diagnostic)")
     println("  --warmups N --repetitions-small N --repetitions-large N")
 end
 
