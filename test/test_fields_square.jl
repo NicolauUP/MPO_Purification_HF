@@ -238,3 +238,52 @@ end
     @test opnorm(fock - expected) < 1e-10
     @test opnorm(fock - fock') < 1e-12
 end
+
+@testset "P1.4a square SCF Fock selector" begin
+    params = parameters_square(L=4, U=0.7, S=nothing)
+    sys = System(params)
+    diagonal = MPO_MeanField.diagonal_mpo_from_function(
+        x -> 0.15 + 0.01 * Int(x), Float64, sys.sites, params.tci_tol,
+    )
+    horizontal_bond = MPO_MeanField.diagonal_mpo_from_function(
+        coordinate -> begin
+            x, y = square_lattice_decoder(Int(coordinate), params.L)
+            x < 3 ? 0.02 * (1 + x + 2y) : 0.0
+        end,
+        Float64,
+        sys.sites,
+        params.tci_tol,
+    )
+    vertical_bond = MPO_MeanField.diagonal_mpo_from_function(
+        coordinate -> begin
+            x, y = square_lattice_decoder(Int(coordinate), params.L)
+            y < 3 ? -0.015 * (1 + 2x + y) : 0.0
+        end,
+        Float64,
+        sys.sites,
+        params.tci_tol,
+    )
+    T_R, T_L, T_U, T_D = sys.translations
+    sys.ρ = +(
+        diagonal,
+        apply(horizontal_bond, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        apply(T_L, ITensors.dag(horizontal_bond); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        apply(vertical_bond, T_U; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        apply(T_D, ITensors.dag(vertical_bond); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim);
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+
+    rho = dense_matrix(sys.ρ, sys)
+    _, fock = extract_mean_fields(sys)
+    observed = dense_matrix(fock, sys)
+    expected = zeros(16, 16)
+    for (site, neighbour, _) in square_undirected_bonds(params.L)
+        expected[site, neighbour] = -params.U * real(rho[site, neighbour])
+        expected[neighbour, site] = expected[site, neighbour]
+        @test isapprox(observed[site, neighbour], expected[site, neighbour]; atol=1e-10, rtol=1e-10)
+        @test isapprox(observed[neighbour, site], expected[neighbour, site]; atol=1e-10, rtol=1e-10)
+    end
+    @test observed ≈ expected atol=1e-10
+    @test opnorm(observed - observed') < 1e-12
+end
