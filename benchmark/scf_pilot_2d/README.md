@@ -9,7 +9,7 @@ Each completed run writes:
 
 - `metadata.toml` — full physical and numerical input, conservative spectral bounds, and project fingerprint;
 - `progress.txt` — purification and SCF progress without terminal control codes;
-- `scf_history.csv` — one row per SCF iteration, including residuals, energy, and MPO bond dimensions;
+- `scf_history.csv` — one row per SCF iteration, including residuals and MPO bond dimensions; the energy column is intentionally empty because the direct square-energy diagnostic is evaluated only after convergence;
 - `observables.toml` — final particle number, checkerboard order, energy components, residuals, ranks, and five density/Hartree probes;
 - `process_time.txt` — wall time, CPU time, allocations reported by `/usr/bin/time`.
 

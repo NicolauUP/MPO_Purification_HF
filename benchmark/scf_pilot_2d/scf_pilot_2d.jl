@@ -184,8 +184,12 @@ function run_pilot(config)
     _write_metadata(joinpath(output, "metadata.toml"), config, params, bounds)
     sys = System(params)
     converged = open(joinpath(output, "progress.txt"), "w") do progress
+        # The square energy evaluator directly measures every site and bond.
+        # It is deliberately deferred to `_write_observables` after SCF: doing
+        # that O(N) diagnostic on every iteration would invalidate this QTT
+        # scaling pilot and does not affect the SCF update.
         run_scf!(sys, bounds...; purification_method=:sp2, verbose=:all, io=progress,
-            overwrite_progress=false, record_energy=true)
+            overwrite_progress=false, record_energy=false)
     end
     _write_history(joinpath(output, "scf_history.csv"), scf_diagnostics(sys))
     _write_observables(joinpath(output, "observables.toml"), sys, converged, bounds)
