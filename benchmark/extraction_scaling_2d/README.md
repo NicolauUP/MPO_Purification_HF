@@ -72,3 +72,24 @@ reports whole-process peak RSS; `samples.csv` contains per-kernel time and
 allocation measurements. Inspect `errors.csv` and the direct-probe error
 columns before interpreting any performance result: failed cases are recorded
 and the remaining grid continues.
+
+## Explicit adjacency-compression sweep
+
+`adjacency_compression_sweep.jl` starts from the accurate, untruncated fused
+adjacency field for the smooth synthetic density. It then compresses copies of
+that field under explicit `(cutoff, maxdim)` policies. Its `summary.csv` is
+plot-ready: plot direct-probe error against `field_max_chi`,
+`median_allocations_bytes`, or `median_time_s`.
+
+```bash
+export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
+sbatch --export=ALL,MPO_BENCHMARK_ROOT="$MPO_BENCHMARK_ROOT" \
+  benchmark/extraction_scaling_2d/adjacency_compression_sweep.slurm \
+  --side-levels 4,6,8,10 \
+  --cutoffs 1e-14,1e-12,1e-10,1e-8 \
+  --maxdims 16,32,64,128,256 \
+  --repetitions 3
+```
+
+Record each completed run and its interpretation in the tracked
+[`docs/logbook/benchmark_runs.md`](../../../docs/logbook/benchmark_runs.md).
