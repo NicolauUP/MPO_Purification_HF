@@ -44,6 +44,12 @@
         verify_spectral_bounds=true,
         verbose=:nothing,
     )
+    history = scf_diagnostics(sys).history
+    @test all(record -> !isnothing(record.rho_bond_dimension), history)
+    @test all(record -> !isnothing(record.hartree_bond_dimension), history)
+    @test all(record -> !isnothing(record.fock_bond_dimension), history)
+    @test all(record -> !isnothing(record.effective_hamiltonian_bond_dimension), history)
+    @test all(record -> record.rho_bond_dimension <= params.itensors_maxdim, history)
     H_effective = +(sys.H0, sys.VH, sys.VF;
         cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
     )

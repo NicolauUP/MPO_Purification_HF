@@ -35,7 +35,12 @@ Base.@kwdef struct ParametersSquare{Tt<:Tuple, Tu, Tw, Ts} <: AbstractModelParam
     scf_max_iterations::Int
 end
 
-"""A compact scalar record from one SCF iteration; it deliberately stores no MPOs."""
+"""A compact scalar record from one SCF iteration; it deliberately stores no MPOs.
+
+`hartree_bond_dimension` and `fock_bond_dimension` refer to the fields freshly
+extracted from the recorded density. `effective_hamiltonian_bond_dimension`
+refers to the Hamiltonian that was purified to obtain that density.
+"""
 struct SCFIterationRecord
     iteration::Int
     trace::Float64
@@ -47,6 +52,10 @@ struct SCFIterationRecord
     purification_converged::Bool
     purification_termination_reason::Symbol
     purification_iterations::Int
+    rho_bond_dimension::Union{Nothing,Int}
+    hartree_bond_dimension::Union{Nothing,Int}
+    fock_bond_dimension::Union{Nothing,Int}
+    effective_hamiltonian_bond_dimension::Union{Nothing,Int}
     energy_total::Union{Nothing,Float64}
 end
 

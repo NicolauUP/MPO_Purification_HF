@@ -146,6 +146,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 false,
                 purification.termination_reason,
                 purification.iterations,
+                maxlinkdim(sys.ρ),
+                maxlinkdim(sys.VH),
+                maxlinkdim(sys.VF),
+                nothing,
                 nothing,
             ))
             sys.scf_diagnostics = SCFDiagnostics(history, false, :purification_failed)
@@ -201,6 +205,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             purification.converged,
             purification.termination_reason,
             purification.iterations,
+            maxlinkdim(ρ_purified_device),
+            maxlinkdim(vh_mpo),
+            maxlinkdim(vf_mpo),
+            maxlinkdim(H_effective),
             energy_total,
         ))
         if verbose != :nothing
@@ -211,6 +219,11 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 vf_residual,
                 rho_residual,
                 commutator_residual,
+            )
+            details *= @sprintf(
+                " | χ=(ρ:%d,VH:%d,VF:%d,H:%d)",
+                maxlinkdim(ρ_purified_device), maxlinkdim(vh_mpo),
+                maxlinkdim(vf_mpo), maxlinkdim(H_effective),
             )
             if !isnothing(fock_components)
                 horizontal_norm = sqrt(max(0.0, real(inner(fock_components.horizontal, fock_components.horizontal))))

@@ -31,6 +31,11 @@
     @test isfinite(diagnostics.history[end].rho_residual)
     @test isfinite(diagnostics.history[end].commutator_residual)
     @test isinf(diagnostics.history[1].two_cycle_residual)
+    @test all(record -> !isnothing(record.rho_bond_dimension), diagnostics.history)
+    @test all(record -> !isnothing(record.hartree_bond_dimension), diagnostics.history)
+    @test all(record -> !isnothing(record.fock_bond_dimension), diagnostics.history)
+    @test all(record -> !isnothing(record.effective_hamiltonian_bond_dimension), diagnostics.history)
+    @test all(record -> record.rho_bond_dimension > 0, diagnostics.history)
 
     limited = System(parameters_1d(
         L=2,
@@ -63,6 +68,10 @@ end
             true,
             :converged,
             10,
+            4,
+            5,
+            6,
+            7,
             nothing,
         )
     end
