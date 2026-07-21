@@ -41,20 +41,15 @@ scaling study. `sp2_gapped` additionally includes SP2 density construction;
 it is useful only after a small preflight establishes that the chosen
 truncation settings are feasible on the target hardware.
 
-`sp2_separable_aa_cdw` prepares a static, non-SCF density from
-
-\[
-W(x,y)=0.21\cos(2\pi\alpha x+0.17)+0.13\cos(2\pi\alpha y-0.31)
-       +0.19(-1)^{x+y},\qquad \alpha=(\sqrt5-1)/2.
-\]
-
-Run its intermediate-size feasibility series before attempting a larger
-production-like density:
+`sp2_gapped` prepares a static checkerboard CDW-potential density,
+`W(x,y)=+0.6` on one sublattice and `-0.6` on the other. It is SP2 only, not
+an SCF calculation. Run its intermediate-size feasibility series before
+attempting a larger physical-density case:
 
 ```bash
 sbatch --export=ALL,MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks \
   benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
-  --side-levels 4,6,8 --sources sp2_separable_aa_cdw \
+  --side-levels 4,6,8 --sources sp2_gapped \
   --warmups 0 --repetitions-small 1 --repetitions-large 1
 ```
 

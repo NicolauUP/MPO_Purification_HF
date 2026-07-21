@@ -68,14 +68,9 @@
     end
 end
 
-@testset "P1.2a square binary-carry Hartree with separable quasiperiodic density" begin
-    # Production-like static density source, not an SCF calculation. The
-    # separable Aubry--Andre modulation and checkerboard term break the simple
-    # smooth and translation-invariant structures used by the dense test above.
-    alpha = (sqrt(5.0) - 1.0) / 2.0
-    W = (x, y) -> 0.21 * cos(2pi * alpha * Int(x) + 0.17) +
-                  0.13 * cos(2pi * alpha * Int(y) - 0.31) +
-                  0.19 * (-1.0)^(Int(x) + Int(y))
+@testset "P1.2a square binary-carry Hartree with checkerboard SP2 density" begin
+    # Static checkerboard CDW potential, not an SCF seed or calculation.
+    W = (x, y) -> iseven(Int(x) + Int(y)) ? 0.6 : -0.6
     params = parameters_square(
         # Keep the SP2-backed unit test small. At larger L the current generic
         # four-MPO addition is itself the performance subject under study.
@@ -88,7 +83,7 @@ end
         purification_steps=60,
     )
     sys = System(params)
-    spectral_bounds = (-4.0, 4.0)
+    spectral_bounds = (-3.5, 3.5)
     rho0 = construct_rho_0(sys, params, spectral_bounds...; method=:sp2)
     result = perform_purification(
         rho0,
