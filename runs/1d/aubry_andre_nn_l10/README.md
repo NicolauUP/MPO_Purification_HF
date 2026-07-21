@@ -8,7 +8,7 @@ The hopping is
 
 \[
 t(x)=-1-V_2\cos\left(2\pi\tau(x+\tfrac12)\right),
-\qquad \tau=(\sqrt5-1)/2,
+\qquad \tau=\sqrt2-5/6\approx0.580880229,
 \]
 
 with the package's existing nearest-neighbour real-exchange HF convention.

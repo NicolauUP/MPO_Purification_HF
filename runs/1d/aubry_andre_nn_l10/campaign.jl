@@ -3,10 +3,10 @@ using MPO_MeanField
 # Open 1D nearest-neighbour Hartree--Fock reference cases for comparison with
 # external ED results. The coordinate provided to `t` is zero-based, so this
 # implements t(x) = -1 - V2*cos(2π*τ*(x + 1/2)) exactly as specified.
-const TAU_GOLDEN = (sqrt(5.0) - 1.0) / 2.0
+const TAU_AUBRY_ANDRE = sqrt(2.0) - 5.0 / 6.0
 
 function aubry_andre_hopping(V2::Real)
-    x -> -1.0 - Float64(V2) * cos(2π * TAU_GOLDEN * (Float64(x) + 0.5))
+    x -> -1.0 - Float64(V2) * cos(2π * TAU_AUBRY_ANDRE * (Float64(x) + 0.5))
 end
 
 # For an open chain, ||H0||∞ <= 2*max|t|. With a physical density matrix,
