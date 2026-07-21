@@ -277,7 +277,7 @@ end
 function print_usage()
     println("Usage: julia --project=. benchmark/extraction_scaling_2d/extraction_scaling_2d.jl --output DIRECTORY [options]")
     println("  --side-levels 2,3,...,10  (side=2^L_side; total bits=2L_side)")
-    println("  --sources smooth,sp2_gapped")
+    println("  --sources smooth,sp2_gapped,sp2_separable_aa_cdw")
     println("  --warmups N --repetitions-small N --repetitions-large N")
 end
 
