@@ -68,6 +68,54 @@
     end
 end
 
+@testset "P1.2a square binary-carry Hartree with separable quasiperiodic density" begin
+    # Production-like static density source, not an SCF calculation. The
+    # separable Aubry--Andre modulation and checkerboard term break the simple
+    # smooth and translation-invariant structures used by the dense test above.
+    alpha = (sqrt(5.0) - 1.0) / 2.0
+    W = (x, y) -> 0.21 * cos(2pi * alpha * Int(x) + 0.17) +
+                  0.13 * cos(2pi * alpha * Int(y) - 0.31) +
+                  0.19 * (-1.0)^(Int(x) + Int(y))
+    params = parameters_square(
+        # Keep the SP2-backed unit test small. At larger L the current generic
+        # four-MPO addition is itself the performance subject under study.
+        L=2,
+        t=(-0.6, -0.35),
+        U=0.7,
+        W=W,
+        S=nothing,
+        itensors_maxdim=128,
+        purification_steps=60,
+    )
+    sys = System(params)
+    spectral_bounds = (-4.0, 4.0)
+    rho0 = construct_rho_0(sys, params, spectral_bounds...; method=:sp2)
+    result = perform_purification(
+        rho0,
+        params;
+        method=:sp2,
+        verbose=0,
+        spectral_bounds=spectral_bounds,
+    )
+    @test result.converged
+    sys.ρ = result.rho
+
+    carry_hartree = extract_hartree_mpo_binary_carry_square(sys)
+    for site in 1:(2^params.L)
+        direct_hartree = params.U * sum(
+            real(MatrixChecker(
+                sys.ρ, sys.sites, neighbour, neighbour, sys.bra_states, sys.ket_states,
+            ))
+            for neighbour in values(square_neighbours(site, params.L))
+            if !isnothing(neighbour)
+        )
+        carry_value = real(MatrixChecker(
+            carry_hartree, sys.sites, site, site, sys.bra_states, sys.ket_states,
+        ))
+        @test isapprox(carry_value, direct_hartree; atol=1e-8, rtol=1e-8)
+    end
+end
+
 @testset "P1.3 square horizontal Fock dense reference" begin
     params = parameters_square(L=4, U=0.7, S=nothing)
     sys = System(params)
