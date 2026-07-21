@@ -41,6 +41,27 @@ scaling study. `sp2_gapped` additionally includes SP2 density construction;
 it is useful only after a small preflight establishes that the chosen
 truncation settings are feasible on the target hardware.
 
+`sp2_separable_aa_cdw` prepares a static, non-SCF density from
+
+\[
+W(x,y)=0.21\cos(2\pi\alpha x+0.17)+0.13\cos(2\pi\alpha y-0.31)
+       +0.19(-1)^{x+y},\qquad \alpha=(\sqrt5-1)/2.
+\]
+
+Run its intermediate-size feasibility series before attempting a larger
+production-like density:
+
+```bash
+sbatch --export=ALL,MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks \
+  benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
+  --side-levels 4,6,8 --sources sp2_separable_aa_cdw \
+  --warmups 0 --repetitions-small 1 --repetitions-large 1
+```
+
+This performs SP2 plus one binary-carry extraction at each size, without SCF.
+Inspect `errors.csv`, direct-probe errors, and bond dimensions before advancing
+to `L_side=10`.
+
 ```bash
 export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
 sbatch benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \

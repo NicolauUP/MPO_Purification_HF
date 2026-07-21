@@ -85,9 +85,49 @@ function _sp2_system(total_bits::Int)
     return sys, "noninteracting_gapped_sp2", details
 end
 
+"""
+Prepare a nonuniform but reproducible square density for extraction validation.
+The potential is a separable two-direction quasiperiodic modulation plus a
+checkerboard CDW term. This is deliberately a static SP2 calculation, not an
+interacting SCF calculation.
+"""
+function _sp2_separable_aa_cdw_system(total_bits::Int)
+    alpha = (sqrt(5.0) - 1.0) / 2.0
+    potential = (x, y) ->
+        0.21 * cos(2pi * alpha * Int(x) + 0.17) +
+        0.13 * cos(2pi * alpha * Int(y) - 0.31) +
+        0.19 * (-1.0)^(Int(x) + Int(y))
+    params = ParametersSquare(
+        L=total_bits, t=(-0.6, -0.35), U=0.3, W=potential, S=nothing,
+        tci_tol=1e-10, itensors_tol=1e-12, itensors_maxdim=128,
+        density=0.5, purification_steps=60, scf_mixing=0.5, scf_tol=0.1,
+        scf_max_iterations=5,
+    )
+    sys = System(params)
+    spectral_bounds = (-4.0, 4.0)
+    initial = construct_rho_0(sys, params, spectral_bounds...; method=:sp2)
+    result = perform_purification(
+        initial, params;
+        method=:sp2,
+        verbose=0,
+        spectral_bounds=spectral_bounds,
+    )
+    result.converged || error(
+        "SP2 preparation did not converge: $(result.termination_reason), trace_error=$(result.trace_error)",
+    )
+    sys.ρ = result.rho
+    details = @sprintf(
+        "sp2_separable_aa_cdw:alpha=%.16f;Ax=0.21;Ay=0.13;cdw=0.19;phix=0.17;phiy=-0.31;iterations=%d;trace_error=%.3e;idempotency=%.3e;max_chi=%d",
+        alpha, result.iterations, something(result.trace_error, NaN),
+        result.idempotency_residual, result.final_bond_dimension,
+    )
+    return sys, "separable_aa_cdw_sp2", details
+end
+
 function _system(source::Symbol, total_bits::Int)
     source == :smooth && return _smooth_system(total_bits)
     source == :sp2_gapped && return _sp2_system(total_bits)
+    source == :sp2_separable_aa_cdw && return _sp2_separable_aa_cdw_system(total_bits)
     throw(ArgumentError("unknown source $source"))
 end
 
