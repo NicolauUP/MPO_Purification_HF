@@ -260,9 +260,10 @@ end
 
 Shift a diagonal QTT field by one open-square neighbour without forming a
 translation MPO. Square coordinates use the established interleaved bit order
-`(y₀, x₀, y₁, x₁, …)`: horizontal shifts carry through the `x` bits (Julia
-site positions `2, 4, …`), vertical shifts through `y` bits (`1, 3, …`). The
-other coordinate's bits transmit the carry state unchanged. Overflow and
+`(y₀, x₀, y₁, x₁, …)`. QTT tensor order runs from the most-significant bit to
+the least-significant bit, so horizontal shifts carry through odd Julia site
+positions (`1, 3, …`) and vertical shifts through even positions (`2, 4, …`).
+The other coordinate's bits transmit the carry state unchanged. Overflow and
 underflow are discarded at the physical square boundary.
 """
 function _shift_qtt_tensors_binary_carry_square(
@@ -281,7 +282,7 @@ function _shift_qtt_tensors_binary_carry_square(
 
     horizontal = direction in (:right, :left)
     binary_direction = direction in (:right, :up) ? :right : :left
-    active_site(site_number) = horizontal ? iseven(site_number) : isodd(site_number)
+    active_site(site_number) = horizontal ? isodd(site_number) : iseven(site_number)
     carries = [Index(2, "SquareHartreeCarry,link=$link") for link in 1:(L - 1)]
     shifted = Vector{ITensor}(undef, L)
 

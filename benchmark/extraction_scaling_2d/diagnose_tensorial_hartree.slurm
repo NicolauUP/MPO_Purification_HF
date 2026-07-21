@@ -9,7 +9,7 @@
 #SBATCH --account=epor78
 #SBATCH --time=04:00:00
 
-# Run the large smooth-density tensorial-Hartree diagnosis serially. Each case
+# Run the large smooth-density binary-carry Hartree diagnosis serially. Each case
 # changes exactly one numerical control relative to the baseline: this is an
 # accuracy diagnosis, not a parallel performance benchmark.
 set -euo pipefail
@@ -26,7 +26,7 @@ export JULIA_DEPOT_PATH="${JULIA_DEPOT_PATH:-/gpfs/projects/epor78/cluster_depot
 export JULIA_PKG_PRECOMPILE_AUTO=0
 
 DIAGNOSTIC_ROOT="${MPO_BENCHMARK_ROOT:?set MPO_BENCHMARK_ROOT to an external result directory}"
-OUTPUT_DIR="${DIAGNOSTIC_ROOT}/tensorial_hartree_diagnosis_${SLURM_JOB_ID}"
+OUTPUT_DIR="${DIAGNOSTIC_ROOT}/binary_carry_hartree_diagnosis_${SLURM_JOB_ID}"
 mkdir -p "$OUTPUT_DIR"
 
 echo "Working directory: $WORKING_DIR"
@@ -56,4 +56,4 @@ run_case cutoff_1e-14 --cutoff 1e-14 --maxdim 128
 run_case maxdim_256 --cutoff 1e-12 --maxdim 256
 run_case maxdim_512 --cutoff 1e-12 --maxdim 512
 
-echo "All tensorial-Hartree isolation cases completed."
+echo "All binary-carry Hartree isolation cases completed."

@@ -1,17 +1,17 @@
 #!/usr/bin/env julia
 
 """
-Diagnose the square tensorial Hartree construction at selected physical sites.
+Diagnose the square binary-carry Hartree construction at selected physical sites.
 
 The smooth density is known analytically, while the direct MPO probes use the
-actual density MPO. This distinguishes source-density approximation, translated
-component errors, and error introduced when the four components are summed.
+actual density MPO. This distinguishes source-density approximation, directional
+binary-carry component errors, and error introduced by field assembly.
 
 Example (large cluster case):
 
     julia --startup-file=no --project=. \
       benchmark/extraction_scaling_2d/diagnose_tensorial_hartree.jl \
-      --side-level 10 --output tensorial_hartree_Lside10.txt
+      --side-level 10 --output binary_carry_hartree_Lside10.txt
 
 Repeat with a different `--cutoff` or `--maxdim` rather than interpreting a
 single global MPO norm as a local accuracy guarantee.
@@ -107,43 +107,54 @@ function _write_report(io::IO, configuration)
     side = 2^configuration.side_level
     L = params.L
 
-    density_diagonal = MPO_MeanField._density_diagonal_mpo(sys.ρ, sys.sites, params)
-    T_R, T_L, T_U, T_D = sys.translations
+    density_tensors = MPO_MeanField._density_diagonal_qtt_tensors(sys.ρ, sys.sites)
     components = (
-        right=MPO_MeanField._shift_diagonal_mpo(density_diagonal, T_R, T_L, params),
-        left=MPO_MeanField._shift_diagonal_mpo(density_diagonal, T_L, T_R, params),
-        up=MPO_MeanField._shift_diagonal_mpo(density_diagonal, T_U, T_D, params),
-        down=MPO_MeanField._shift_diagonal_mpo(density_diagonal, T_D, T_U, params),
+        right=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :right),
+            sys.sites, params; symmetrize=false,
+        ),
+        left=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :left),
+            sys.sites, params; symmetrize=false,
+        ),
+        up=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :up),
+            sys.sites, params; symmetrize=false,
+        ),
+        down=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :down),
+            sys.sites, params; symmetrize=false,
+        ),
     )
-    component_sum = +(components.right, components.left, components.up, components.down;
+    raw_hartree = +(params.U * components.right, params.U * components.left,
+        params.U * components.up, params.U * components.down;
         cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-    scaled_component_sum = params.U * component_sum
-    tensorial = extract_hartree_mpo_tensorial_square(sys)
-    tci = extract_hartree_mpo_square(sys)
+    final_hartree = +(0.5 * raw_hartree, 0.5 * ITensors.dag(raw_hartree);
+        cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+    public_hartree = extract_hartree_mpo_binary_carry_square(sys)
 
-    println(io, "Square tensorial Hartree diagnostic")
-    println(io, "===================================")
+    println(io, "Square binary-carry Hartree diagnostic")
+    println(io, "=======================================")
     println(io, "side_level=$(configuration.side_level), L_total=$L, side=$side, N=$(2^L)")
     println(io, "density source=smooth synthetic; tci_tol=$(params.tci_tol), cutoff=$(params.itensors_tol), maxdim=$(params.itensors_maxdim)")
     println(io, "rho chi: max=$(maxlinkdim(sys.ρ)), mean=$(_mean_chi(sys.ρ))")
-    println(io, "field chi: TCI=$(maxlinkdim(tci)), tensorial=$(maxlinkdim(tensorial)), component_sum=$(maxlinkdim(scaled_component_sum))")
-    println(io, "global relative tensorial-vs-TCI=$(_relative_difference(tensorial, tci, params))")
-    println(io, "global relative component_sum-vs-tensorial=$(_relative_difference(scaled_component_sum, tensorial, params))")
+    println(io, "field chi: raw=$(maxlinkdim(raw_hartree)), final=$(maxlinkdim(final_hartree)), public=$(maxlinkdim(public_hartree))")
+    println(io, "global relative raw-vs-final=$(_relative_difference(raw_hartree, final_hartree, params))")
+    println(io, "global relative final-vs-public=$(_relative_difference(final_hartree, public_hartree, params))")
     println(io)
     println(io, "Each component is expected to equal the actual rho diagonal at the named neighbour; a missing neighbour contributes zero.")
-    println(io, @sprintf("%-13s %13s %13s %13s %13s %13s", "probe (x,y)", "direct VH", "TCI error", "tensor error", "sum error", "rho diag error"))
+    println(io, @sprintf("%-13s %13s %13s %13s %13s", "probe (x,y)", "direct VH", "raw error", "final error", "rho diag error"))
 
     largest_component_error = (error=-Inf, probe=(0, 0), component=:none)
     for (x, y) in _probes(side)
         site = square_lattice_index(x, y, L)
         direct = _direct_hartree(sys, site)
-        tci_value = _field_diagonal(tci, sys, site)
-        tensor_value = _field_diagonal(tensorial, sys, site)
-        sum_value = params.U * _field_diagonal(component_sum, sys, site)
+        raw_value = _field_diagonal(raw_hartree, sys, site)
+        final_value = _field_diagonal(final_hartree, sys, site)
         rho_value = _rho_diagonal(sys, site)
         analytic = _analytic_density(x, y, side)
-        println(io, @sprintf("(%4d,%4d) %13.6e %13.6e %13.6e %13.6e %13.6e", x, y, direct,
-            tci_value - direct, tensor_value - direct, sum_value - direct, rho_value - analytic))
+        println(io, @sprintf("(%4d,%4d) %13.6e %13.6e %13.6e %13.6e", x, y, direct,
+            raw_value - direct, final_value - direct, rho_value - analytic))
 
         neighbours = square_neighbours(site, L)
         for component in (:right, :left, :up, :down)
@@ -158,16 +169,17 @@ function _write_report(io::IO, configuration)
         end
     end
     println(io)
-    println(io, "Largest translated-component error: $(largest_component_error.error) at probe $(largest_component_error.probe), component $(largest_component_error.component)")
+    println(io, "Largest binary-carry component error: $(largest_component_error.error) at probe $(largest_component_error.probe), component $(largest_component_error.component)")
     println(io, "Interpretation:")
     println(io, "  * rho diag error isolates approximation in the synthetic density MPO.")
-    println(io, "  * component errors isolate a translation/boundary/compression error.")
-    println(io, "  * sum error differs from tensor error only if the final field assembly differs from the explicit component sum.")
+    println(io, "  * component errors isolate a directional carry or boundary error before Hartree assembly.")
+    println(io, "  * raw error isolates the four-component MPO addition; final error additionally includes Hermitian symmetrization.")
     println(io, "  * Repeat with --cutoff 1e-14 and --maxdim 256 (one change at a time) to test truncation sensitivity.")
 end
 
 function print_usage()
     println("Usage: julia --project=. benchmark/extraction_scaling_2d/diagnose_tensorial_hartree.jl [options]")
+    println("Diagnoses binary-carry components despite the legacy filename.")
     println("  --side-level N   2:10, default 10")
     println("  --cutoff X       MPO cutoff, default 1e-12")
     println("  --maxdim N       MPO maximum bond dimension, default 128")

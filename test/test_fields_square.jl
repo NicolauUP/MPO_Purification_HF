@@ -32,6 +32,40 @@
     carry_hartree = dense_matrix(extract_hartree_mpo_binary_carry_square(sys), sys)
     @test carry_hartree ≈ expected atol=1e-10
     @test opnorm(carry_hartree - carry_hartree') < 1e-12
+
+    # Check each interleaved binary-carry direction separately. The final
+    # Hartree sum alone could conceal a horizontal/vertical axis swap.
+    density_tensors = MPO_MeanField._density_diagonal_qtt_tensors(sys.ρ, sys.sites)
+    carry_components = (
+        right=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :right),
+            sys.sites, params; symmetrize=false,
+        ),
+        left=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :left),
+            sys.sites, params; symmetrize=false,
+        ),
+        up=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :up),
+            sys.sites, params; symmetrize=false,
+        ),
+        down=MPO_MeanField._diagonal_mpo_from_qtt_tensors(
+            MPO_MeanField._shift_qtt_tensors_binary_carry_square(density_tensors, sys.sites, :down),
+            sys.sites, params; symmetrize=false,
+        ),
+    )
+    for site in 1:16
+        neighbours = square_neighbours(site, params.L)
+        for direction in (:right, :left, :up, :down)
+            neighbour = getproperty(neighbours, direction)
+            expected_density = isnothing(neighbour) ? 0.0 : occupations[neighbour]
+            observed_density = MatrixChecker(
+                getproperty(carry_components, direction), sys.sites, site, site,
+                sys.bra_states, sys.ket_states,
+            )
+            @test isapprox(observed_density, expected_density; atol=1e-10)
+        end
+    end
 end
 
 @testset "P1.3 square horizontal Fock dense reference" begin
