@@ -41,6 +41,68 @@ function validate_spectral_bounds(H_min::Real, H_max::Real; safety_margin::Real=
 end
 
 """
+    square_scf_spectral_bounds(params; potential_bounds=nothing,
+                               hopping_abs_bounds=nothing, margin=0.0)
+
+Return a conservative interval for every effective Hamiltonian of the open
+square nearest-neighbour Hartree--Fock model, provided the supplied
+coefficient bounds are valid and the density matrix remains a contraction.
+
+The open square has coordination at most four. The implemented Hartree and
+real-exchange fields therefore have row-sum bounds `4abs(U)` each. Together
+with the hopping row sum, the returned interval is
+
+```math
+[W_{min} - 2(t_x^* + t_y^*) - 8|U| - m,
+ W_{max} + 2(t_x^* + t_y^*) + 8|U| + m].
+```
+
+Numeric hopping bounds are inferred from `params.t`. Functional hopping needs
+`hopping_abs_bounds=(max_abs_tx, max_abs_ty)`. A functional external potential
+needs its known global range as `potential_bounds=(W_min, W_max)`. `margin` is
+additional nonnegative energy padding for MPO/truncation uncertainty.
+"""
+function square_scf_spectral_bounds(
+    params::ParametersSquare;
+    potential_bounds::Union{Nothing,Tuple{<:Real,<:Real}}=nothing,
+    hopping_abs_bounds::Union{Nothing,Tuple{<:Real,<:Real}}=nothing,
+    margin::Real=0.0,
+)
+    isfinite(margin) && margin >= 0 || throw(ArgumentError(
+        "margin must be finite and nonnegative, got $margin",
+    ))
+    hopping_bounds = if isnothing(hopping_abs_bounds)
+        all(component -> component isa Number, params.t) || throw(ArgumentError(
+            "functional square hopping requires hopping_abs_bounds=(abs_tx, abs_ty)",
+        ))
+        (abs(Float64(params.t[1])), abs(Float64(params.t[2])))
+    else
+        hopping_abs_bounds
+    end
+    all(value -> isfinite(value) && value >= 0, hopping_bounds) || throw(ArgumentError(
+        "hopping_abs_bounds must be finite and nonnegative, got $hopping_bounds",
+    ))
+    onsite_bounds = if isnothing(potential_bounds)
+        isnothing(params.W) || throw(ArgumentError(
+            "a square external potential function requires potential_bounds=(W_min, W_max)",
+        ))
+        (0.0, 0.0)
+    else
+        potential_bounds
+    end
+    W_min, W_max = Float64.(onsite_bounds)
+    isfinite(W_min) && isfinite(W_max) && W_min <= W_max || throw(ArgumentError(
+        "potential_bounds must be finite and satisfy W_min <= W_max, got $onsite_bounds",
+    ))
+    hopping_radius = 2 * (Float64(hopping_bounds[1]) + Float64(hopping_bounds[2]))
+    interaction_radius = 8 * abs(Float64(params.U))
+    return validate_spectral_bounds(
+        W_min - hopping_radius - interaction_radius - margin,
+        W_max + hopping_radius + interaction_radius + margin,
+    )
+end
+
+"""
     verify_spectral_bounds_exact(sys, H, H_min, H_max; safety_margin=0.0)
 
 Validate user-supplied bounds against the dense spectrum of `H`. This is a

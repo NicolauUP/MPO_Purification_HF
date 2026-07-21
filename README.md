@@ -171,7 +171,14 @@ params = ParametersSquare(
 )
 
 sys = System(params)
-ok = run_scf!(sys, -5.0, 5.0;
+# Bounds include hopping, the known range of W, and a conservative bound on
+# the square Hartree and real-exchange fields.
+bounds = square_scf_spectral_bounds(
+    params;
+    potential_bounds=(0.0, 0.657), # extrema of W on this 4 x 4 example
+    margin=0.5,
+)
+ok = run_scf!(sys, bounds...;
     purification_method=:sp2,
     verify_spectral_bounds=true,
     verbose=:all,
@@ -192,6 +199,15 @@ All purification paths require a valid enclosing interval `(H_min, H_max)`.
 For a small system, use `verify_spectral_bounds=true` to check it against the
 dense spectrum at every SCF update. That validation is intentionally limited
 to \(N\le16\) and must not be used as a production spectral solver.
+
+For square SCF calculations with constant hopping, use
+`square_scf_spectral_bounds` to construct a conservative interval from known
+global coefficient bounds. For a functional `W`, supply its analytic range as
+`potential_bounds=(W_min, W_max)`; for functional hopping, also supply
+`hopping_abs_bounds=(max_abs_tx, max_abs_ty)`. The helper assumes a physical
+density contraction and adds a worst-case `8abs(U)` interaction radius, so it
+is deliberately conservative. Retain a positive `margin` for MPO truncation
+uncertainty and document all supplied bounds in production metadata.
 
 | Method | Ensemble / input | Use case |
 | --- | --- | --- |
