@@ -98,6 +98,25 @@ This job is the appropriate way to decide whether the apparently converged
 `--side-level` above 4: the script rejects that request to avoid an accidental
 large dense diagonalization.
 
+## Refinement after the current SP2 stopping rule
+
+`sp2_refinement_validation_2d.jl` is a separate diagnostic. It first runs the
+unchanged production SP2 procedure, then applies extra polynomials only inside
+the diagnostic and writes dense-reference metrics after each one. It tests
+whether the hard-coded SP2 stopping threshold returns too early.
+
+```bash
+export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
+sbatch --export=ALL,MPO_BENCHMARK_ROOT="$MPO_BENCHMARK_ROOT" \
+  benchmark/extraction_scaling_2d/sp2_refinement_validation_2d.slurm \
+  --side-level 4 --itensors-tol 1e-14 --itensors-maxdim 256 \
+  --steps 50 --padding 0.5 --extra-iterations 8
+```
+
+Read `refinement.csv`: row zero is the normal SP2 stopping state, and rows
+1--8 are forced extra polynomials. Production source files and normal SP2
+behavior are unchanged by this diagnostic.
+
 ```bash
 export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
 sbatch benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
