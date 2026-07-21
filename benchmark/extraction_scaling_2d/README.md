@@ -76,6 +76,28 @@ This is a diagnosis, not a production SCF run. Compare its `errors.csv` and
 SP2 source details with the corresponding `1e-12` run; do not infer a general
 production cutoff from one lattice size.
 
+## Exact dense validation of the cluster checkerboard case
+
+`sp2_dense_validation_2d.jl` is a deliberately bounded diagnostic. It allows
+only `L_side <= 4`; its largest dense matrix is therefore the `256 x 256`
+checkerboard Hamiltonian. It uses dense diagonalization to validate the Fermi
+gap and spectral bounds, then compares the final MPO-SP2 density against the
+exact occupied projector. It writes `summary.csv`, `sp2_history.txt`,
+`metadata.txt`, and `process_time.txt`.
+
+```bash
+export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
+sbatch --export=ALL,MPO_BENCHMARK_ROOT="$MPO_BENCHMARK_ROOT" \
+  benchmark/extraction_scaling_2d/sp2_dense_validation_2d.slurm \
+  --side-level 4 --itensors-tol 1e-14 --itensors-maxdim 128 \
+  --steps 50 --padding 0.5
+```
+
+This job is the appropriate way to decide whether the apparently converged
+`16 x 16` MPO-SP2 density is also close to the dense projector. Do not raise
+`--side-level` above 4: the script rejects that request to avoid an accidental
+large dense diagonalization.
+
 ```bash
 export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
 sbatch benchmark/extraction_scaling_2d/extraction_scaling_2d.slurm \
