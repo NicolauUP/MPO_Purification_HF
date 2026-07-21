@@ -446,13 +446,11 @@ end
 """
     extract_hartree_mpo_binary_carry_square_adjacency(sys)
 
-Experimental fused square Hartree extractor. It constructs the density
-diagonal once and evaluates `U * A_nn * n` in a single, untruncated QTT MPO--
-MPS application. Unlike [`extract_hartree_mpo_binary_carry_square`](@ref), it
-does not form or compress a generic sum of four global diagonal MPOs.
-
-This routine is intentionally opt-in until its bond dimensions and direct
-field accuracy have been benchmarked on production-representative densities.
+Fused square Hartree extractor. It constructs the density diagonal once and
+evaluates `U * A_nn * n` in a single, untruncated QTT MPO--MPS application.
+Unlike [`extract_hartree_mpo_binary_carry_square`](@ref), it does not form or
+compress a generic sum of four global diagonal MPOs. This is the square
+Hartree path used by [`extract_mean_fields`](@ref) and `run_scf!`.
 """
 function extract_hartree_mpo_binary_carry_square_adjacency(sys::System)
     sys.params isa ParametersSquare || throw(ArgumentError(
@@ -751,7 +749,8 @@ function _extract_mean_fields_with_components(sys::System)
         fock = +(horizontal, vertical;
             cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
         )
-        return extract_hartree_mpo_square(sys), fock, (horizontal=horizontal, vertical=vertical)
+        hartree = extract_hartree_mpo_binary_carry_square_adjacency(sys)
+        return hartree, fock, (horizontal=horizontal, vertical=vertical)
     end
     throw(ArgumentError("no mean-field extractor for $(typeof(sys.params))"))
 end

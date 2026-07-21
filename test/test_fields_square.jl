@@ -39,6 +39,24 @@
     @test adjacency_hartree ≈ expected atol=1e-10
     @test opnorm(adjacency_hartree - adjacency_hartree') < 1e-12
 
+    # The square SCF selector must use the fused adjacency path, not the
+    # legacy TCI Hartree extractor. Check every site directly against the
+    # physical nearest-neighbour density sum.
+    scf_hartree, _ = extract_mean_fields(sys)
+    for site in 1:16
+        direct = params.U * sum(
+            real(MatrixChecker(
+                sys.ρ, sys.sites, neighbour, neighbour, sys.bra_states, sys.ket_states,
+            ))
+            for neighbour in values(square_neighbours(site, params.L))
+            if !isnothing(neighbour)
+        )
+        observed = real(MatrixChecker(
+            scf_hartree, sys.sites, site, site, sys.bra_states, sys.ket_states,
+        ))
+        @test isapprox(observed, direct; atol=1e-10, rtol=1e-10)
+    end
+
     # Check each interleaved binary-carry direction separately. The final
     # Hartree sum alone could conceal a horizontal/vertical axis swap.
     density_tensors = MPO_MeanField._density_diagonal_qtt_tensors(sys.ρ, sys.sites)
