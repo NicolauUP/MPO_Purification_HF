@@ -2,7 +2,17 @@
 
 Three independent half-filled open-chain SCF calculations for comparison with
 external ED results. The physical chain has `N=2^10=1024` sites and
-`N_e=512` spinless particles. There is no onsite potential or seed.
+`N_e=512` spinless particles. There is no onsite potential. All three cases
+use the temporary initial Hartree seed
+
+\[
+S(x)=0.1(-1)^x.
+\]
+
+`S` is not an external physical potential: it affects the first SCF
+Hamiltonian only and is replaced by the extracted Hartree field after that
+iteration. The distinct campaign name prevents collision with the earlier
+unseeded result directories.
 
 The hopping is
 

@@ -9,6 +9,11 @@ function aubry_andre_hopping(V2::Real)
     x -> -1.0 - Float64(V2) * cos(2π * TAU_AUBRY_ANDRE * (Float64(x) + 0.5))
 end
 
+# A temporary positive checkerboard Hartree seed. `S` initializes only the
+# first SCF Hamiltonian; it is replaced by the extracted mean field after the
+# first iteration and is not an external physical onsite potential.
+checkerboard_seed(amplitude::Real) = x -> iseven(Int(x)) ? Float64(amplitude) : -Float64(amplitude)
+
 # For an open chain, ||H0||∞ <= 2*max|t|. With a physical density matrix,
 # each nearest-neighbour Hartree and real-exchange row contribution is bounded
 # by 2|U|, giving the conservative SCF interval ±(2*(1+V2)+4|U|+0.5).
@@ -23,7 +28,7 @@ function reference_case(label::String, V2::Real, U::Real)
         t=aubry_andre_hopping(V2),
         U=Float64(U),
         W=nothing,
-        S=nothing,
+        S=checkerboard_seed(0.1),
         tci_tol=1e-10,
         itensors_tol=1e-14,
         itensors_maxdim=256,
@@ -44,7 +49,7 @@ function reference_case(label::String, V2::Real, U::Real)
 end
 
 campaign = (
-    name="aubry_andre_nn_l10",
+    name="aubry_andre_nn_l10_seed0p1",
     runs=[
         reference_case("v2_0_u_1", 0.0, 1.0),
         reference_case("v2_0p5_u_1", 0.5, 1.0),
