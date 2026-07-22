@@ -7,7 +7,7 @@
 # local analysis environment if it is not already available:
 #
 #   mkdir -p analysis_env
-#   julia --project=analysis_env -e 'using Pkg; Pkg.add("CairoMakie")'
+#   julia --project=analysis_env -e 'using Pkg; Pkg.add(["CairoMakie", "Pluto"])'
 #   julia --project=analysis_env -e 'using Pluto; Pluto.run()'
 #
 # Then open this file in Pluto and set `result_root` below. Only Julia stdlib
