@@ -45,3 +45,17 @@ exact `input.jl`, selection/provenance metadata, full SCF history, final
 `site_density.csv`, nearest-neighbour `bond_order.csv`, and final scalar
 observables. Compare ED and MPO results using the same open boundary, hopping
 phase convention, half filling, and real-exchange approximation.
+
+## Dense Hartree--Fock reference
+
+`submit_dense_hf.slurm` solves the same 1D Hartree--Fock fixed-point problem
+by diagonalizing the real tridiagonal effective Hamiltonian at each iteration.
+It is an exact one-particle HF reference, not many-body ED. It reuses this
+campaign's hopping, interaction, seed, filling, mixing, and stopping policy,
+then writes the same density/bond/energy files under a separate external
+campaign name ending in `_dense_hf`.
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/1d/aubry_andre_nn_l10/submit_dense_hf.slurm
+```
