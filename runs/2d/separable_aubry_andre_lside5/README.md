@@ -63,3 +63,20 @@ The result root is
 Interpret this experiment before changing a field extractor: if SP2 fails in
 this isolated problem after reaching the cap, the limitation is purification
 compression rather than SCF feedback.
+
+## P1.3: tight fixed-Hamiltonian interval control
+
+The dense reference gives the clean initial spectrum as
+`[-3.983143..., 3.983143...]`. Run this single control before altering any
+production SCF bound:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_3_tight_interval_sp2.slurm
+```
+
+It changes only the fixed initial-SP2 interval from `[-12.5, 12.5]` to the
+safe dense enclosure `[-4.25, 4.25]`, retaining `maxdim=256`,
+`itensors_tol=1e-14`, and every other P1.2 setting. This interval is only
+valid for `H0 + S`; it is deliberately not proposed as an SCF production
+bound after Hartree and Fock fields have been added.

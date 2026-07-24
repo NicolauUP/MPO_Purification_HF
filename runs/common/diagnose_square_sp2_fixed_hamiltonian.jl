@@ -15,7 +15,7 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) == 4 || error("usage: diagnose_square_sp2_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY")
+length(ARGS) in (4, 6) || error("usage: diagnose_square_sp2_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY [SPECTRAL_LOWER SPECTRAL_UPPER]")
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
 maxdim = tryparse(Int, ARGS[3])
@@ -53,7 +53,17 @@ function mean_bond_dimension(mpo::MPO)
 end
 
 params = with_maxdim(spec.params, maxdim)
-bounds = (Float64(spec.spectral_bounds[1]), Float64(spec.spectral_bounds[2]))
+campaign_bounds = (Float64(spec.spectral_bounds[1]), Float64(spec.spectral_bounds[2]))
+bounds = if length(ARGS) == 6
+    lower = tryparse(Float64, ARGS[5])
+    upper = tryparse(Float64, ARGS[6])
+    isnothing(lower) && error("SPECTRAL_LOWER must be a float")
+    isnothing(upper) && error("SPECTRAL_UPPER must be a float")
+    isfinite(lower) && isfinite(upper) && lower < upper || error("spectral bounds must be finite and strictly ordered")
+    (lower, upper)
+else
+    campaign_bounds
+end
 N = 2 ^ params.L
 Ne = round(Int, N * params.density)
 repo_root = abspath(joinpath(@__DIR__, "..", ".."))
@@ -150,6 +160,8 @@ open(joinpath(output, "summary.toml"), "w") do io
         "task_index" => task_index, "diagnostic" => "fixed_initial_hamiltonian_sp2",
         "matrix_dimension" => N, "target_particles" => Ne,
         "spectral_lower" => bounds[1], "spectral_upper" => bounds[2],
+        "campaign_spectral_lower" => campaign_bounds[1],
+        "campaign_spectral_upper" => campaign_bounds[2],
         "itensors_tol" => params.itensors_tol, "itensors_maxdim" => maxdim,
         "purification_steps" => params.purification_steps,
         "trace_tolerance" => trace_tolerance,
