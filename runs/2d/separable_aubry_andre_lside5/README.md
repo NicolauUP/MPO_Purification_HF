@@ -80,3 +80,20 @@ safe dense enclosure `[-4.25, 4.25]`, retaining `maxdim=256`,
 `itensors_tol=1e-14`, and every other P1.2 setting. This interval is only
 valid for `H0 + S`; it is deliberately not proposed as an SCF production
 bound after Hartree and Fock fields have been added.
+
+## P1.4 and P1.5: independent tight-scaling controls
+
+After submitting P1.3, these array controls can run independently:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_4_tight_cap_ladder.slurm
+
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_5_interval_ladder.slurm
+```
+
+P1.4 holds the interval at `[-4.25, 4.25]` and runs `maxdim=128,384`; P1.3
+already supplies the `maxdim=256` middle point. P1.5 holds `maxdim=256` and
+uses `[-4.05,4.05]`, `[-5,5]`, and `[-6,6]`; it omits the in-progress P1.3
+`[-4.25,4.25]` case. All five jobs isolate one numerical control at a time.
