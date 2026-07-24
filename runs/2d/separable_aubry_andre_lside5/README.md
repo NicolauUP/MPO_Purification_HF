@@ -42,3 +42,24 @@ MPO. It writes under the separate campaign name
 `separable_aubry_andre_lside5_seed0p1_dense_hf`, so both calculation paths
 retain their densities, bond orders, SCF histories, energy components, and
 provenance independently.
+
+## P1.2: fixed-Hamiltonian SP2 cap diagnostic
+
+Before retrying the MPO SCF calculation, run the initial-SP2 diagnostic:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_2_fixed_sp2.slurm
+```
+
+This submits one job per input Hamiltonian. Each job runs the same first SCF
+Hamiltonian, `H0 + S`, at `maxdim = 128, 256, 384, 512`, without updating any
+Hartree or Fock field. Every run writes `iterations.csv` with the trace,
+candidate polynomial traces, branch, rank, cap-contact flag, idempotency, and
+per-step resources. `summary.toml` records the production SP2 stopping result.
+
+The result root is
+`$MPO_RESULTS_ROOT/separable_aubry_andre_lside5_seed0p1_fixed_sp2/`.
+Interpret this experiment before changing a field extractor: if SP2 fails in
+this isolated problem after reaching the cap, the limitation is purification
+compression rather than SCF feedback.

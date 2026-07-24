@@ -1,0 +1,186 @@
+#!/usr/bin/env julia
+
+"""Diagnose a square campaign's first, fixed-Hamiltonian SP2 purification.
+
+This constructs exactly the initial Hamiltonian used by SCF iteration one,
+H0 + S, then runs the production SP2 recurrence without entering SCF or
+extracting Hartree/Fock fields. Each `iterations.csv` row is one actual SP2
+step before its selected polynomial is applied.
+"""
+
+using Dates
+using ITensors
+using ITensorMPS
+using MPO_MeanField
+using SHA
+using TOML
+
+length(ARGS) == 4 || error("usage: diagnose_square_sp2_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY")
+campaign_file = abspath(ARGS[1])
+task_index = tryparse(Int, ARGS[2])
+maxdim = tryparse(Int, ARGS[3])
+output = abspath(ARGS[4])
+isnothing(task_index) && error("TASK_INDEX must be an integer")
+isnothing(maxdim) && error("MAXDIM must be an integer")
+maxdim > 0 || error("MAXDIM must be positive")
+isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
+include(campaign_file)
+@isdefined(campaign) || error("campaign file must define `campaign`")
+1 <= task_index <= length(campaign.runs) || error("TASK_INDEX is outside the campaign")
+spec = campaign.runs[task_index]
+spec.params isa ParametersSquare || error("fixed square SP2 diagnostic requires ParametersSquare")
+ispath(output) && error("refusing to overwrite existing output directory: $output")
+
+csv_escape(value) = '"' * replace(string(value), '"' => "\"\"") * '"'
+write_csv_row(io, values) = println(io, join(csv_escape.(values), ','))
+git_revision(root) = try readchomp(`git -C $root rev-parse HEAD`) catch; "unavailable" end
+
+function with_maxdim(params::ParametersSquare, maxdim::Int)
+    ParametersSquare(
+        L=params.L, t=params.t, U=params.U, W=params.W, S=params.S,
+        tci_tol=params.tci_tol, itensors_tol=params.itensors_tol,
+        itensors_maxdim=maxdim, density=params.density,
+        purification_steps=params.purification_steps,
+        scf_mixing=params.scf_mixing, scf_tol=params.scf_tol,
+        scf_max_iterations=params.scf_max_iterations,
+    )
+end
+
+function mean_bond_dimension(mpo::MPO)
+    length(mpo) <= 1 && return 1.0
+    dimensions = [dim(commonind(mpo[index], mpo[index + 1])) for index in 1:(length(mpo) - 1)]
+    isempty(dimensions) ? 1.0 : sum(dimensions) / length(dimensions)
+end
+
+params = with_maxdim(spec.params, maxdim)
+bounds = (Float64(spec.spectral_bounds[1]), Float64(spec.spectral_bounds[2]))
+N = 2 ^ params.L
+Ne = round(Int, N * params.density)
+repo_root = abspath(joinpath(@__DIR__, "..", ".."))
+started_at = now(UTC)
+mkpath(output)
+cp(campaign_file, joinpath(output, "input.jl"))
+
+sys = System(params)
+initialization = @timed construct_rho_0(
+    sys, params, bounds[1], bounds[2]; method=:sp2,
+    verify_spectral_bounds=false,
+)
+rho = initialization.value
+trace_tolerance = MPO_MeanField._sp2_trace_tolerance(params, Ne)
+hermiticity_tolerance = MPO_MeanField._sp2_hermiticity_tolerance(params)
+idempotency_tolerance = 1e-3
+previous_idempotency = Inf
+stagnant_steps = 0
+converged = false
+termination_reason = :max_iterations
+last_trace = NaN
+last_trace_error = NaN
+last_idempotency = NaN
+last_hermiticity = NaN
+last_iteration = 0
+
+open(joinpath(output, "iterations.csv"), "w") do io
+    write_csv_row(io, (
+        "iteration", "branch", "trace", "trace_squared", "trace_hole",
+        "trace_error", "idempotency_residual", "hermiticity_residual",
+        "rho_max_chi", "rho_squared_max_chi", "rho_mean_chi",
+        "rho_squared_mean_chi", "cap_reached", "step_time_s",
+        "step_allocations_bytes", "step_gc_time_s",
+    ))
+    for iteration in 1:params.purification_steps
+        global rho, previous_idempotency, stagnant_steps, converged
+        global termination_reason, last_trace, last_trace_error
+        global last_idempotency, last_hermiticity, last_iteration
+        step = @timed begin
+            rho_squared = apply(rho, rho;
+                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+            )
+            trace_value = real(tr(rho))
+            trace_squared = real(tr(rho_squared))
+            trace_hole = 2trace_value - trace_squared
+            idempotency = MPO_MeanField.idempotency_residual(rho, rho_squared)
+            hermiticity = MPO_MeanField._relative_mpo_residual(rho, ITensors.dag(rho), params)
+            branch = MPO_MeanField._sp2_branch(trace_value, trace_squared, Ne, trace_tolerance)
+            (rho_squared, trace_value, trace_squared, trace_hole, idempotency, hermiticity, branch)
+        end
+        rho_squared, trace_value, trace_squared, trace_hole, idempotency, hermiticity, branch = step.value
+        rho_chi = maxlinkdim(rho)
+        rho_squared_chi = maxlinkdim(rho_squared)
+        trace_error = abs(trace_value - Ne)
+        write_csv_row(io, (
+            iteration, branch, trace_value, trace_squared, trace_hole, trace_error,
+            idempotency, hermiticity, rho_chi, rho_squared_chi,
+            mean_bond_dimension(rho), mean_bond_dimension(rho_squared),
+            rho_chi >= maxdim || rho_squared_chi >= maxdim,
+            step.time, step.bytes, step.gctime,
+        ))
+        flush(io)
+
+        last_trace = trace_value
+        last_trace_error = trace_error
+        last_idempotency = idempotency
+        last_hermiticity = hermiticity
+        last_iteration = iteration
+        if trace_error <= trace_tolerance && idempotency < idempotency_tolerance && hermiticity <= hermiticity_tolerance
+            converged = true
+            termination_reason = :idempotency_threshold
+            break
+        end
+        if idempotency >= previous_idempotency * (1 - 1e-12)
+            stagnant_steps += 1
+        else
+            stagnant_steps = 0
+        end
+        if stagnant_steps >= 8
+            termination_reason = :stagnation
+            break
+        end
+        previous_idempotency = idempotency
+        rho = branch == :square ? rho_squared : +(
+            2.0 * rho, -rho_squared;
+            cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+        )
+    end
+end
+
+open(joinpath(output, "summary.toml"), "w") do io
+    TOML.print(io, Dict(
+        "campaign" => string(campaign.name), "label" => string(spec.label),
+        "task_index" => task_index, "diagnostic" => "fixed_initial_hamiltonian_sp2",
+        "matrix_dimension" => N, "target_particles" => Ne,
+        "spectral_lower" => bounds[1], "spectral_upper" => bounds[2],
+        "itensors_tol" => params.itensors_tol, "itensors_maxdim" => maxdim,
+        "purification_steps" => params.purification_steps,
+        "trace_tolerance" => trace_tolerance,
+        "idempotency_tolerance" => idempotency_tolerance,
+        "hermiticity_tolerance" => hermiticity_tolerance,
+        "initial_rho_max_chi" => maxlinkdim(initialization.value),
+        "initial_rho_mean_chi" => mean_bond_dimension(initialization.value),
+        "initialization_time_s" => initialization.time,
+        "initialization_allocations_bytes" => initialization.bytes,
+        "initialization_gc_time_s" => initialization.gctime,
+        "converged" => converged, "termination_reason" => string(termination_reason),
+        "iterations" => last_iteration, "final_rho_max_chi" => maxlinkdim(rho),
+        "final_rho_mean_chi" => mean_bond_dimension(rho), "final_trace" => last_trace,
+        "final_trace_error" => last_trace_error,
+        "final_idempotency_residual" => last_idempotency,
+        "final_hermiticity_residual" => last_hermiticity,
+    ))
+end
+open(joinpath(output, "metadata.toml"), "w") do io
+    TOML.print(io, Dict(
+        "started_at" => string(started_at), "finished_at" => string(now(UTC)),
+        "julia_version" => string(VERSION),
+        "threads" => Threads.nthreads(), "git_revision" => git_revision(repo_root),
+        "project_sha1" => bytes2hex(sha1(read(joinpath(repo_root, "Project.toml")))),
+        "manifest_sha1" => bytes2hex(sha1(read(joinpath(repo_root, "Manifest.toml")))),
+        "slurm_job_id" => get(ENV, "SLURM_JOB_ID", "local"),
+        "slurm_array_task_id" => get(ENV, "SLURM_ARRAY_TASK_ID", "local"),
+    ))
+end
+
+println("Fixed-Hamiltonian SP2 diagnostic: label=$(spec.label) maxdim=$maxdim")
+println("converged=$converged termination=$termination_reason iterations=$last_iteration")
+println("final trace error=$last_trace_error idempotency=$last_idempotency chi=$(maxlinkdim(rho))")
+println("Result directory: $output")
