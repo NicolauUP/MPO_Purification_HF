@@ -97,3 +97,18 @@ P1.4 holds the interval at `[-4.25, 4.25]` and runs `maxdim=128,384`; P1.3
 already supplies the `maxdim=256` middle point. P1.5 holds `maxdim=256` and
 uses `[-4.05,4.05]`, `[-5,5]`, and `[-6,6]`; it omits the in-progress P1.3
 `[-4.25,4.25]` case. All five jobs isolate one numerical control at a time.
+
+## P1.6: branch-free McWeeny control
+
+The clean fixed initial Hamiltonian is particle-hole symmetric at half filling,
+so its exact chemical potential is `mu=0`. Run the direct-McWeeny comparison:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_6_mcweeny_mu_control.slurm
+```
+
+It uses the same `[-4.25,4.25]` linear initialization and `maxdim=256` as
+P1.3, but replaces the SP2 branch recurrence with
+`P -> 3P^2 - 2P^3`. Trace is reported as a symmetry invariant, not used to
+select a polynomial or enforce the grand-canonical McWeeny occupation.
