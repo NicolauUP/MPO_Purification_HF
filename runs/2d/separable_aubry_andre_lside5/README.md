@@ -112,3 +112,18 @@ It uses the same `[-4.25,4.25]` linear initialization and `maxdim=256` as
 P1.3, but replaces the SP2 branch recurrence with
 `P -> 3P^2 - 2P^3`. Trace is reported as a symmetry invariant, not used to
 select a polynomial or enforce the grand-canonical McWeeny occupation.
+
+## P1.7: looser McWeeny compression control
+
+To assess a practical `1e-3`-scale projector target, run the same P1.6
+control with only the MPO compression cutoff changed from `1e-14` to `1e-8`:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_7_mcweeny_tol1e8.slurm
+```
+
+The diagnostic still records trace and idempotency at every step and retains
+the production McWeeny `1e-6` stopping criterion. Thus a nonconverged result
+can still demonstrate whether looser compression reaches a stable practical
+residual near `1e-3` at lower cost.

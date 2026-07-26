@@ -14,22 +14,25 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) in (6, 7) || error("usage: diagnose_square_mcweeny_mu_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY SPECTRAL_LOWER SPECTRAL_UPPER [MU]")
+length(ARGS) in (6, 7, 8) || error("usage: diagnose_square_mcweeny_mu_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY SPECTRAL_LOWER SPECTRAL_UPPER [MU [ITENSORS_TOL]]")
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
 maxdim = tryparse(Int, ARGS[3])
 output = abspath(ARGS[4])
 lower = tryparse(Float64, ARGS[5])
 upper = tryparse(Float64, ARGS[6])
-chemical_potential = length(ARGS) == 7 ? tryparse(Float64, ARGS[7]) : 0.0
+chemical_potential = length(ARGS) >= 7 ? tryparse(Float64, ARGS[7]) : 0.0
+itensors_tol_override = length(ARGS) == 8 ? tryparse(Float64, ARGS[8]) : nothing
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
 isnothing(lower) && error("SPECTRAL_LOWER must be a float")
 isnothing(upper) && error("SPECTRAL_UPPER must be a float")
 isnothing(chemical_potential) && error("MU must be a float")
+length(ARGS) == 8 && isnothing(itensors_tol_override) && error("ITENSORS_TOL must be a float")
 maxdim > 0 || error("MAXDIM must be positive")
 isfinite(lower) && isfinite(upper) && lower < upper || error("spectral bounds must be finite and strictly ordered")
 lower < chemical_potential < upper || error("MU must lie strictly within the spectral interval")
+isnothing(itensors_tol_override) || (isfinite(itensors_tol_override) && itensors_tol_override > 0) || error("ITENSORS_TOL must be finite and positive")
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
 include(campaign_file)
 @isdefined(campaign) || error("campaign file must define `campaign`")
@@ -42,10 +45,10 @@ csv_escape(value) = '"' * replace(string(value), '"' => "\"\"") * '"'
 write_csv_row(io, values) = println(io, join(csv_escape.(values), ','))
 git_revision(root) = try readchomp(`git -C $root rev-parse HEAD`) catch; "unavailable" end
 
-function with_maxdim(params::ParametersSquare, maxdim::Int)
+function with_truncation(params::ParametersSquare, maxdim::Int, itensors_tol::Float64)
     ParametersSquare(
         L=params.L, t=params.t, U=params.U, W=params.W, S=params.S,
-        tci_tol=params.tci_tol, itensors_tol=params.itensors_tol,
+        tci_tol=params.tci_tol, itensors_tol=itensors_tol,
         itensors_maxdim=maxdim, density=params.density,
         purification_steps=params.purification_steps,
         scf_mixing=params.scf_mixing, scf_tol=params.scf_tol,
@@ -59,7 +62,7 @@ function mean_bond_dimension(mpo::MPO)
     isempty(dimensions) ? 1.0 : sum(dimensions) / length(dimensions)
 end
 
-params = with_maxdim(spec.params, maxdim)
+params = with_truncation(spec.params, maxdim, something(itensors_tol_override, spec.params.itensors_tol))
 bounds = (lower, upper)
 campaign_bounds = (Float64(spec.spectral_bounds[1]), Float64(spec.spectral_bounds[2]))
 N = 2 ^ params.L
@@ -152,6 +155,7 @@ open(joinpath(output, "summary.toml"), "w") do io
         "campaign_spectral_lower" => campaign_bounds[1],
         "campaign_spectral_upper" => campaign_bounds[2],
         "itensors_tol" => params.itensors_tol, "itensors_maxdim" => maxdim,
+        "campaign_itensors_tol" => spec.params.itensors_tol,
         "purification_steps" => params.purification_steps,
         "idempotency_tolerance" => idempotency_tolerance,
         "initial_rho_max_chi" => maxlinkdim(initialization.value),
