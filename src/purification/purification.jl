@@ -14,6 +14,10 @@ function perform_purification(
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
     chemical_potential::Union{Nothing,Real}=nothing,
+    mcweeny_form::Symbol=:standard,
+    mcweeny_identity_mpo::Union{Nothing,MPO}=nothing,
+    mcweeny_trace_target::Union{Nothing,Real}=nothing,
+    mcweeny_trace_tolerance::Union{Nothing,Real}=nothing,
     gc_policy::Symbol=:automatic,
     gc_period::Integer=10,
     gc_threshold_bytes::Integer=1 << 30,
@@ -33,6 +37,10 @@ function perform_purification(
             verbose=verbose, spectral_bounds=spectral_bounds,
             spectral_bounds_validation=spectral_bounds_validation,
             chemical_potential=chemical_potential,
+            form=mcweeny_form,
+            identity_mpo=mcweeny_identity_mpo,
+            trace_target=mcweeny_trace_target,
+            trace_tolerance=mcweeny_trace_tolerance,
         )
     elseif method == :palser_manolopoulos || method == :adaptive_pm_mcweeny
         return perform_purification_palser_manolopoulos(
@@ -49,6 +57,6 @@ function perform_purification(
         )
     end
     throw(ArgumentError(
-        "unknown purification method $method; supported methods are :palser_manolopoulos, :sp2",
+        "unknown purification method $method; supported methods are :palser_manolopoulos, :mcweeny_mu, and :sp2",
     ))
 end

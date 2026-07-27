@@ -55,6 +55,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:sp2,
     chemical_potential::Union{Nothing,Real}=nothing,
+    mcweeny_form::Symbol=:standard,
+    mcweeny_trace_target::Union{Nothing,Real}=nothing,
+    mcweeny_trace_tolerance::Union{Nothing,Real}=nothing,
     gc_policy::Symbol=:automatic,
     gc_period::Integer=10,
     gc_threshold_bytes::Integer=1 << 30,
@@ -108,6 +111,12 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     commutator_residual = Inf
     rho_two_steps_ago = nothing
     overwrote_scf_progress = false
+    mcweeny_identity_mpo = if purification_method == :mcweeny_mu &&
+                              mcweeny_form == :horner
+        to_gpu(Identity_MPO(sys.sites))
+    else
+        nothing
+    end
     for iter in 1:params.scf_max_iterations
         # Step 1: Obtain density matrix!
         ρ0_device = construct_rho_0(
@@ -128,6 +137,10 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             ),
             method=purification_method,
             chemical_potential=chemical_potential,
+            mcweeny_form=mcweeny_form,
+            mcweeny_identity_mpo=mcweeny_identity_mpo,
+            mcweeny_trace_target=mcweeny_trace_target,
+            mcweeny_trace_tolerance=mcweeny_trace_tolerance,
             gc_policy=gc_policy,
             gc_period=gc_period,
             gc_threshold_bytes=gc_threshold_bytes,
