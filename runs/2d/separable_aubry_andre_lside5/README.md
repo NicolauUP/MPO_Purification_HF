@@ -240,3 +240,18 @@ and nearest-neighbor bond-order errors, checkerboard order, one-body energy,
 trace, idempotency, Hermiticity, and stationarity. The MPO is not converted
 to a full dense matrix. Outputs are written below
 `$MPO_RESULTS_ROOT/square_lside5_sp2_dense_gap1/`.
+
+## P2.2: strict gap-1 SP2 stopping threshold
+
+Test whether the `maxdim=384` gap-1 projector continues improving when the
+SP2 idempotency threshold is tightened from the default `1e-3` to `1e-4`:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p2_2_sp2_dense_gap1_strict.slurm
+```
+
+This repeats the complete exact-diagonalization comparison and writes to
+`$MPO_RESULTS_ROOT/square_lside5_sp2_dense_gap1_strict/`. It is intentionally
+a single `maxdim=384` run: the question is whether additional SP2 iterations
+improve the projector before fixed-cap truncation produces stagnation.

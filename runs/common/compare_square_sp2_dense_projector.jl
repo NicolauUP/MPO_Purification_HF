@@ -16,16 +16,21 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) == 4 || error(
-    "usage: compare_square_sp2_dense_projector.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY",
+length(ARGS) in (4, 5) || error(
+    "usage: compare_square_sp2_dense_projector.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY [SP2_IDEMPOTENCY_TOLERANCE]",
 )
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
 maxdim = tryparse(Int, ARGS[3])
 output = abspath(ARGS[4])
+sp2_idempotency_tolerance = length(ARGS) == 5 ? tryparse(Float64, ARGS[5]) : 1e-3
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
+isnothing(sp2_idempotency_tolerance) &&
+    error("SP2_IDEMPOTENCY_TOLERANCE must be a number")
 maxdim > 0 || error("MAXDIM must be positive")
+isfinite(sp2_idempotency_tolerance) && sp2_idempotency_tolerance > 0 ||
+    error("SP2_IDEMPOTENCY_TOLERANCE must be finite and positive")
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
 include(campaign_file)
 @isdefined(campaign) || error("campaign file must define `campaign`")
@@ -148,6 +153,7 @@ purification = @timed open(joinpath(output, "sp2_progress.txt"), "w") do progres
         verbose=1,
         io=progress,
         overwrite_progress=false,
+        sp2_idempotency_tolerance=sp2_idempotency_tolerance,
         spectral_bounds=bounds,
         spectral_bounds_validation=:supplied_analytical,
     )
@@ -210,6 +216,7 @@ open(joinpath(output, "summary.toml"), "w") do io
         "target_particles" => Ne,
         "itensors_tol" => params.itensors_tol,
         "itensors_maxdim" => params.itensors_maxdim,
+        "sp2_idempotency_tolerance" => sp2_idempotency_tolerance,
         "spectral_lower" => bounds[1],
         "spectral_upper" => bounds[2],
         "exact_lambda_min" => first(eigenpairs.values),
@@ -269,7 +276,10 @@ open(joinpath(output, "metadata.toml"), "w") do io
     ))
 end
 
-println("Fixed square SP2/dense comparison: label=$(spec.label) maxdim=$maxdim")
+println(
+    "Fixed square SP2/dense comparison: label=$(spec.label) maxdim=$maxdim " *
+    "idempotency_tolerance=$sp2_idempotency_tolerance",
+)
 println("SP2 converged=$(result.converged) iterations=$(result.iterations)")
 println("density max error=$(maximum(abs, density_error))")
 println("bond max error=$(maximum(abs, bond_error))")
