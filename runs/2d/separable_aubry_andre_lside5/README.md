@@ -193,3 +193,18 @@ unconstrained fixed-\(\mu\) McWeeny must remain grand-canonical. A
 best-iterate result that did not meet `1e-6` remains nonconverged; a campaign
 must explicitly set `allow_unconverged_purification=true` if it intends to
 continue SCF with a separately justified practical tolerance.
+
+## P1.11: large-gap SP2 control
+
+Test canonical SP2 on a fixed clean Hamiltonian with checkerboard mass
+`S(x,y)=2(-1)^(x+y)`. Its HOMO and LUMO lie near `-2` and `+2`, respectively,
+so the total one-particle gap is `4`:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_11_sp2_gap4.slurm
+```
+
+The run uses `maxdim=256`, `itensors_tol=1e-14`, 50 SP2 steps, half filling,
+and the safe fixed-Hamiltonian interval `[-4.75,4.75]`. It performs no SCF
+and writes to `$MPO_RESULTS_ROOT/square_lside5_sp2_gap4/maxdim_256/`.
