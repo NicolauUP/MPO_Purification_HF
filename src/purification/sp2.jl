@@ -31,6 +31,7 @@ function perform_purification_sp2(
     verbose::Int=1,
     io::IO=stdout,
     overwrite_progress::Bool=io isa Base.TTY,
+    idempotency_tolerance::Real=1e-3,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
 )
@@ -38,13 +39,15 @@ function perform_purification_sp2(
         "SP2 requires explicit enclosing spectral_bounds",
     ))
     spectral_bounds = validate_spectral_bounds(spectral_bounds...)
+    idempotency_tolerance = Float64(idempotency_tolerance)
+    isfinite(idempotency_tolerance) && idempotency_tolerance > 0 ||
+        throw(ArgumentError("SP2 idempotency_tolerance must be finite and positive"))
 
     N = 2^params.L
     Ne = round(Int, N * params.density)
     0 < Ne < N || throw(ArgumentError("SP2 supports only 0 < Ne < N, got Ne=$Ne"))
     trace_tolerance = _sp2_trace_tolerance(params, Ne)
     hermiticity_tolerance = _sp2_hermiticity_tolerance(params)
-    idempotency_tolerance = 1e-3
 
     verbose > 0 && println(io, "SP2 purifying N=$N, density=$(params.density), Ne=$Ne")
     rho = rho0

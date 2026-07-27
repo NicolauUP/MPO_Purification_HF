@@ -42,6 +42,17 @@ end
     @test all(dimensions -> dimensions[3] == 0, result.work.bond_dimensions)
     @test opnorm(rho - exact) < 2e-3
 
+    strict_result = perform_purification(
+        rho0, params;
+        verbose=0,
+        method=:sp2,
+        spectral_bounds=bounds,
+        sp2_idempotency_tolerance=1e-4,
+    )
+    @test strict_result.converged
+    @test strict_result.idempotency_residual < 1e-4
+    @test strict_result.iterations >= result.iterations
+
     default_result = perform_purification(
         rho0, params;
         verbose=0,
@@ -68,5 +79,12 @@ end
     )
     @test_throws ArgumentError perform_purification(
         rho0, params; verbose=0, method=:unsupported,
+    )
+    @test_throws ArgumentError perform_purification(
+        rho0, params;
+        verbose=0,
+        method=:sp2,
+        spectral_bounds=bounds,
+        sp2_idempotency_tolerance=0.0,
     )
 end
