@@ -2,9 +2,10 @@
 
 """Fixed-Hamiltonian direct-McWeeny control for a square campaign.
 
-This uses the production `:mcweeny_mu` initialization and recurrence on the
-first SCF Hamiltonian H0 + S. Unlike canonical SP2 it has no trace-selected
-branch: P -> 3P^2 - 2P^3. Trace is recorded as an invariant only.
+This uses the production `:mcweeny_mu` initialization on the first SCF
+Hamiltonian H0 + S. Unlike canonical SP2 it has no trace-selected branch.
+The standard `3P^2 - 2P^3` recurrence or the algebraically equivalent Horner
+form `P^2(3I - 2P)` can be selected. Trace is recorded as an invariant only.
 """
 
 using Dates
@@ -14,7 +15,7 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) in (6, 7, 8) || error("usage: diagnose_square_mcweeny_mu_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY SPECTRAL_LOWER SPECTRAL_UPPER [MU [ITENSORS_TOL]]")
+length(ARGS) in (6, 7, 8, 9) || error("usage: diagnose_square_mcweeny_mu_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY SPECTRAL_LOWER SPECTRAL_UPPER [MU [ITENSORS_TOL [RECURRENCE]]]")
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
 maxdim = tryparse(Int, ARGS[3])
@@ -22,17 +23,19 @@ output = abspath(ARGS[4])
 lower = tryparse(Float64, ARGS[5])
 upper = tryparse(Float64, ARGS[6])
 chemical_potential = length(ARGS) >= 7 ? tryparse(Float64, ARGS[7]) : 0.0
-itensors_tol_override = length(ARGS) == 8 ? tryparse(Float64, ARGS[8]) : nothing
+itensors_tol_override = length(ARGS) >= 8 ? tryparse(Float64, ARGS[8]) : nothing
+recurrence = length(ARGS) == 9 ? Symbol(ARGS[9]) : :standard
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
 isnothing(lower) && error("SPECTRAL_LOWER must be a float")
 isnothing(upper) && error("SPECTRAL_UPPER must be a float")
 isnothing(chemical_potential) && error("MU must be a float")
-length(ARGS) == 8 && isnothing(itensors_tol_override) && error("ITENSORS_TOL must be a float")
+length(ARGS) >= 8 && isnothing(itensors_tol_override) && error("ITENSORS_TOL must be a float")
 maxdim > 0 || error("MAXDIM must be positive")
 isfinite(lower) && isfinite(upper) && lower < upper || error("spectral bounds must be finite and strictly ordered")
 lower < chemical_potential < upper || error("MU must lie strictly within the spectral interval")
 isnothing(itensors_tol_override) || (isfinite(itensors_tol_override) && itensors_tol_override > 0) || error("ITENSORS_TOL must be finite and positive")
+recurrence in (:standard, :horner) || error("RECURRENCE must be standard or horner")
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
 include(campaign_file)
 @isdefined(campaign) || error("campaign file must define `campaign`")
@@ -78,6 +81,7 @@ initialization = @timed construct_rho_0(
     chemical_potential=chemical_potential,
 )
 rho = initialization.value
+identity_mpo = recurrence == :horner ? Identity_MPO(sys.sites) : nothing
 idempotency_tolerance = 1e-6
 converged = false
 last_iteration = 0
@@ -86,9 +90,10 @@ open(joinpath(output, "iterations.csv"), "w") do io
     write_csv_row(io, (
         "iteration", "trace", "trace_error", "idempotency_residual",
         "hermiticity_residual", "rho_max_chi", "rho_squared_max_chi",
-        "rho_cubed_max_chi", "rho_mean_chi", "rho_squared_mean_chi",
-        "rho_cubed_mean_chi", "cap_reached", "step_time_s",
-        "step_allocations_bytes", "step_gc_time_s",
+        "auxiliary_kind", "auxiliary_max_chi", "next_rho_max_chi",
+        "rho_mean_chi", "rho_squared_mean_chi", "auxiliary_mean_chi",
+        "next_rho_mean_chi", "cap_reached", "full_step_time_s",
+        "full_step_allocations_bytes", "full_step_gc_time_s",
     ))
     for iteration in 1:params.purification_steps
         global rho, converged, last_iteration
@@ -100,24 +105,51 @@ open(joinpath(output, "iterations.csv"), "w") do io
             idempotency = MPO_MeanField.idempotency_residual(rho, rho_squared)
             hermiticity = MPO_MeanField._relative_mpo_residual(rho, ITensors.dag(rho), params)
             if idempotency < idempotency_tolerance
-                (rho_squared, nothing, trace_value, idempotency, hermiticity)
-            else
-                rho_cubed = apply(rho, rho_squared;
-                    cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+                (
+                    rho_squared=rho_squared,
+                    auxiliary=nothing,
+                    auxiliary_kind=:not_applied,
+                    rho_next=rho,
+                    trace_value=trace_value,
+                    idempotency=idempotency,
+                    hermiticity=hermiticity,
                 )
-                (rho_squared, rho_cubed, trace_value, idempotency, hermiticity)
+            else
+                update = MPO_MeanField._mcweeny_update_from_square(
+                    rho, rho_squared, params;
+                    form=recurrence,
+                    identity_mpo=identity_mpo,
+                )
+                (
+                    rho_squared=rho_squared,
+                    auxiliary=update.auxiliary,
+                    auxiliary_kind=update.auxiliary_kind,
+                    rho_next=update.rho,
+                    trace_value=trace_value,
+                    idempotency=idempotency,
+                    hermiticity=hermiticity,
+                )
             end
         end
-        rho_squared, rho_cubed, trace_value, idempotency, hermiticity = step.value
+        values = step.value
+        rho_squared = values.rho_squared
+        auxiliary = values.auxiliary
+        rho_next = values.rho_next
+        trace_value = values.trace_value
+        idempotency = values.idempotency
+        hermiticity = values.hermiticity
         rho_chi = maxlinkdim(rho)
         rho_squared_chi = maxlinkdim(rho_squared)
-        rho_cubed_chi = isnothing(rho_cubed) ? 0 : maxlinkdim(rho_cubed)
+        auxiliary_chi = isnothing(auxiliary) ? 0 : maxlinkdim(auxiliary)
+        next_rho_chi = maxlinkdim(rho_next)
         write_csv_row(io, (
             iteration, trace_value, abs(trace_value - Ne), idempotency, hermiticity,
-            rho_chi, rho_squared_chi, rho_cubed_chi,
+            rho_chi, rho_squared_chi, values.auxiliary_kind, auxiliary_chi,
+            next_rho_chi,
             mean_bond_dimension(rho), mean_bond_dimension(rho_squared),
-            isnothing(rho_cubed) ? 0.0 : mean_bond_dimension(rho_cubed),
-            rho_chi >= maxdim || rho_squared_chi >= maxdim || rho_cubed_chi >= maxdim,
+            isnothing(auxiliary) ? 0.0 : mean_bond_dimension(auxiliary),
+            mean_bond_dimension(rho_next),
+            maximum((rho_chi, rho_squared_chi, auxiliary_chi, next_rho_chi)) >= maxdim,
             step.time, step.bytes, step.gctime,
         ))
         flush(io)
@@ -126,10 +158,7 @@ open(joinpath(output, "iterations.csv"), "w") do io
             converged = true
             break
         end
-        rho = +(
-            3.0 * rho_squared, -2.0 * rho_cubed;
-            cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
-        )
+        rho = rho_next
     end
 end
 
@@ -148,7 +177,9 @@ termination_reason = converged ? :idempotency_threshold : :max_iterations
 open(joinpath(output, "summary.toml"), "w") do io
     TOML.print(io, Dict(
         "campaign" => string(campaign.name), "label" => string(spec.label),
-        "task_index" => task_index, "diagnostic" => "fixed_initial_hamiltonian_mcweeny_mu",
+        "task_index" => task_index,
+        "diagnostic" => "fixed_initial_hamiltonian_mcweeny_mu_$(recurrence)",
+        "recurrence" => string(recurrence),
         "matrix_dimension" => N, "target_particles" => Ne,
         "chemical_potential" => chemical_potential,
         "spectral_lower" => bounds[1], "spectral_upper" => bounds[2],
@@ -187,7 +218,7 @@ open(joinpath(output, "metadata.toml"), "w") do io
     ))
 end
 
-println("Fixed-Hamiltonian McWeeny diagnostic: label=$(spec.label) maxdim=$maxdim mu=$chemical_potential")
+println("Fixed-Hamiltonian McWeeny diagnostic: label=$(spec.label) maxdim=$maxdim mu=$chemical_potential recurrence=$recurrence")
 println("converged=$converged termination=$termination_reason iterations=$last_iteration")
 println("final trace error=$(abs(final.trace - Ne)) idempotency=$(final.idempotency) chi=$(maxlinkdim(rho))")
 println("Result directory: $output")

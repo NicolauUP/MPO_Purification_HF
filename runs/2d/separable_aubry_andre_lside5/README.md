@@ -143,5 +143,25 @@ The target gaps `0.5`, `1.0`, and `2.0` use checkerboard masses `0.25`,
 fixed. The output root is
 `$MPO_RESULTS_ROOT/square_lside5_mcweeny_gap_ladder/`.
 
-Analyze this ladder before implementing or submitting the Horner-form
-McWeeny comparison.
+The ladder identifies gap `0.2` as the difficult case and gap `1.0` as a
+transition case for the Horner-form comparison below.
+
+## P1.9: standard versus Horner-form McWeeny
+
+Submit the four controlled fixed-Hamiltonian jobs:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_9_mcweeny_horner_comparison.slurm
+```
+
+Tasks 1 and 2 compare the standard and Horner evaluation orders at gap `0.2`;
+tasks 3 and 4 repeat the comparison at gap `1.0`. Every task uses `mu=0`,
+the interval `[-4.25,4.25]`, `maxdim=256`, `itensors_tol=1e-8`, and 50
+iterations. The two forms evaluate the same exact polynomial,
+`3P^2-2P^3 = P^2(3I-2P)`, but MPO truncation occurs in a different order.
+
+Each result writes full-update wall time, allocations, the intermediate bond
+dimension, the next-density bond dimension, trace, and idempotency. Outputs
+are stored under
+`$MPO_RESULTS_ROOT/square_lside5_mcweeny_horner_comparison/`.
