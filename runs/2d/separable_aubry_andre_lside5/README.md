@@ -274,3 +274,20 @@ matrix and checked against exact diagonalization for global projector error,
 trace, idempotency, Hermiticity, stationarity, eigenvalue bounds, all site
 densities, nearest-neighbor bonds, and one-body energy. Results are written
 under `$MPO_RESULTS_ROOT/square_lside5_projector_compression_gap2/`.
+
+## P2.4: SP2 with an operational `1e-8` cutoff
+
+Test whether SP2 can follow the intrinsically low-rank gap-2 projector
+directly when every MPO operation uses `itensors_tol=1e-8`, rather than
+applying that cutoff only after convergence:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p2_4_sp2_cutoff_1e8_gap2.slurm
+```
+
+The two array tasks use `maxdim=128` and `256`. Both run trace-correcting SP2
+on the same `S=±1` gap-2 Hamiltonian, compare the resulting projector with
+exact diagonalization, and record a final `1e-8` recompression control.
+Outputs are written below
+`$MPO_RESULTS_ROOT/square_lside5_sp2_operational_tol_1e8_gap2/`.

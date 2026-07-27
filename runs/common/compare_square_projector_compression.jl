@@ -16,8 +16,8 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) == 6 || error(
-    "usage: compare_square_projector_compression.jl CAMPAIGN_FILE TASK_INDEX MODE MAXDIM OUTPUT_DIRECTORY CUTOFFS",
+length(ARGS) in (6, 7) || error(
+    "usage: compare_square_projector_compression.jl CAMPAIGN_FILE TASK_INDEX MODE MAXDIM OUTPUT_DIRECTORY CUTOFFS [ITENSORS_TOL]",
 )
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
@@ -29,6 +29,7 @@ cutoffs = try
 catch
     error("CUTOFFS must be a comma-separated list of numbers")
 end
+itensors_tol_override = length(ARGS) == 7 ? tryparse(Float64, ARGS[7]) : nothing
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
 mode in (:exact, :sp2) || error("MODE must be `exact` or `sp2`")
@@ -36,6 +37,11 @@ maxdim > 0 || error("MAXDIM must be positive")
 !isempty(cutoffs) || error("at least one cutoff is required")
 all(cutoff -> isfinite(cutoff) && cutoff >= 0, cutoffs) ||
     error("all cutoffs must be finite and nonnegative")
+if length(ARGS) == 7
+    isnothing(itensors_tol_override) && error("ITENSORS_TOL must be a number")
+    isfinite(itensors_tol_override) && itensors_tol_override > 0 ||
+        error("ITENSORS_TOL must be finite and positive")
+end
 length(unique(cutoffs)) == length(cutoffs) || error("cutoffs must be unique")
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
 ispath(output) && error("refusing to overwrite existing output directory: $output")
@@ -51,10 +57,14 @@ write_csv_row(io, values) = println(io, join(csv_escape.(values), ','))
 git_revision(root) = try readchomp(`git -C $root rev-parse HEAD`) catch; "unavailable" end
 rms(values) = sqrt(sum(abs2, values) / length(values))
 
-function with_maxdim(params::ParametersSquare, maxdim::Int)
+function with_numerics(
+    params::ParametersSquare,
+    maxdim::Int,
+    itensors_tol::Float64,
+)
     return ParametersSquare(
         L=params.L, t=params.t, U=params.U, W=params.W, S=params.S,
-        tci_tol=params.tci_tol, itensors_tol=params.itensors_tol,
+        tci_tol=params.tci_tol, itensors_tol=itensors_tol,
         itensors_maxdim=maxdim, density=params.density,
         purification_steps=params.purification_steps,
         scf_mixing=params.scf_mixing, scf_tol=params.scf_tol,
@@ -192,7 +202,9 @@ mean_link_dimension(mpo::MPO) = length(mpo) == 1 ? 1.0 :
 link_dimensions(mpo::MPO) = length(mpo) == 1 ? Int[] :
     [dim(linkind(mpo, bond)) for bond in 1:(length(mpo) - 1)]
 
-params = with_maxdim(spec.params, maxdim)
+operational_itensors_tol = isnothing(itensors_tol_override) ?
+    spec.params.itensors_tol : itensors_tol_override
+params = with_numerics(spec.params, maxdim, operational_itensors_tol)
 bounds = validate_spectral_bounds(spec.spectral_bounds...)
 N = 2^params.L
 Ne = round(Int, params.density * N)
@@ -354,6 +366,7 @@ metadata = Dict(
     "target_particles" => Ne,
     "maxdim" => maxdim,
     "cutoffs" => cutoffs,
+    "campaign_itensors_tol" => spec.params.itensors_tol,
     "itensors_tol" => params.itensors_tol,
     "spectral_lower" => bounds[1],
     "spectral_upper" => bounds[2],
