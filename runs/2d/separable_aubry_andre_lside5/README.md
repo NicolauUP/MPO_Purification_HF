@@ -255,3 +255,22 @@ This repeats the complete exact-diagonalization comparison and writes to
 `$MPO_RESULTS_ROOT/square_lside5_sp2_dense_gap1_strict/`. It is intentionally
 a single `maxdim=384` run: the question is whether additional SP2 iterations
 improve the projector before fixed-cap truncation produces stagnation.
+
+## P2.3: exact and SP2 projector compression
+
+For the checkerboard potential `S=±1` (gap 2), compare the intrinsic QTT
+compression of the exact dense occupied projector with post-compression of
+SP2 projectors generated at `maxdim=256` and `384`:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p2_3_projector_compression_gap2.slurm
+```
+
+The three parallel tasks are exact compression with `maxdim=1024`, SP2 with
+`maxdim=256`, and SP2 with `maxdim=384`. Each uses the cutoff ladder
+`1e-14,1e-12,1e-10,1e-8,1e-6`. Every candidate is converted back to a dense
+matrix and checked against exact diagonalization for global projector error,
+trace, idempotency, Hermiticity, stationarity, eigenvalue bounds, all site
+densities, nearest-neighbor bonds, and one-body energy. Results are written
+under `$MPO_RESULTS_ROOT/square_lside5_projector_compression_gap2/`.
