@@ -18,6 +18,7 @@ struct PurificationResult{R}
     converged::Bool
     termination_reason::Symbol
     iterations::Int
+    selected_iteration::Int
     trace::Float64
     target_particles::Union{Nothing,Float64}
     trace_error::Union{Nothing,Float64}
@@ -173,10 +174,14 @@ function purification_result(
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
     target_particles::Union{Nothing,Real}=round(Int, 2^params.L * params.density),
+    selected_iteration::Integer=iterations,
     work::PurificationWorkStats=PurificationWorkStats(
         0, 0, maxlinkdim(rho), Float64(maxlinkdim(rho)), [(maxlinkdim(rho), 0, 0)],
     ),
 )
+    1 <= selected_iteration <= iterations || throw(ArgumentError(
+        "selected_iteration must satisfy 1 <= selected_iteration <= iterations",
+    ))
     rho_squared = apply(rho, rho; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     trace_value = Float64(real(tr(rho)))
     idem_residual = idempotency_residual(rho, rho_squared)
@@ -188,6 +193,7 @@ function purification_result(
         converged,
         termination_reason,
         iterations,
+        Int(selected_iteration),
         trace_value,
         isnothing(target_particles) ? nothing : Float64(target_particles),
         isnothing(target_particles) ? nothing : abs(trace_value - target_particles),

@@ -20,6 +20,7 @@ end
     @test successful.converged
     @test successful.termination_reason == :idempotency_threshold
     @test 1 <= successful.iterations <= successful_params.purification_steps
+    @test successful.selected_iteration == successful.iterations
     @test successful.trace_error <= 1e-10
     @test successful.idempotency_residual <= 2e-3
     @test successful.hermiticity_residual <= 1e-12
