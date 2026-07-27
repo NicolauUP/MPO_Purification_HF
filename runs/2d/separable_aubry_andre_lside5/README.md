@@ -127,3 +127,21 @@ The diagnostic still records trace and idempotency at every step and retains
 the production McWeeny `1e-6` stopping criterion. Thus a nonconverged result
 can still demonstrate whether looser compression reaches a stable practical
 residual near `1e-3` at lower cost.
+
+## P1.8: fixed-\(\mu\) gap ladder
+
+Run the three checkerboard gaps as independent array tasks:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_8_mcweeny_gap_ladder.slurm
+```
+
+The target gaps `0.5`, `1.0`, and `2.0` use checkerboard masses `0.25`,
+`0.5`, and `1.0`, respectively. Every task holds `mu=0`, the interval
+`[-4.25,4.25]`, `maxdim=256`, `itensors_tol=1e-8`, and 50 McWeeny steps
+fixed. The output root is
+`$MPO_RESULTS_ROOT/square_lside5_mcweeny_gap_ladder/`.
+
+Analyze this ladder before implementing or submitting the Horner-form
+McWeeny comparison.
