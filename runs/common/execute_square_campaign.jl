@@ -42,12 +42,23 @@ ispath(run_dir) && error("refusing to overwrite existing result directory: $run_
 mkpath(run_dir)
 
 cp(campaign_file, joinpath(run_dir, "input.jl"))
+selection = Dict(
+    "campaign" => string(campaign.name),
+    "task_index" => task_index,
+    "label" => string(spec.label),
+    "purification_method" => string(spec.purification_method),
+    "spectral_bounds" => collect(Float64.(spec.spectral_bounds)),
+    "mcweeny_form" => string(get(spec, :mcweeny_form, :standard)),
+    "allow_unconverged_purification" => get(
+        spec, :allow_unconverged_purification, false,
+    ),
+)
+for field in (:chemical_potential, :mcweeny_trace_target, :mcweeny_trace_tolerance)
+    value = get(spec, field, nothing)
+    isnothing(value) || (selection[string(field)] = value)
+end
 open(joinpath(run_dir, "selection.toml"), "w") do io
-    TOML.print(io, Dict(
-        "campaign" => string(campaign.name), "task_index" => task_index,
-        "label" => string(spec.label), "purification_method" => string(spec.purification_method),
-        "spectral_bounds" => collect(Float64.(spec.spectral_bounds)),
-    ))
+    TOML.print(io, selection)
 end
 metadata = Dict(
     "campaign" => string(campaign.name), "task_index" => task_index,
@@ -65,6 +76,13 @@ progress_path = joinpath(run_dir, "progress.txt")
 converged = open(progress_path, "w") do progress
     run_scf!(sys, Float64(spec.spectral_bounds[1]), Float64(spec.spectral_bounds[2]);
         purification_method=spec.purification_method,
+        chemical_potential=get(spec, :chemical_potential, nothing),
+        mcweeny_form=get(spec, :mcweeny_form, :standard),
+        mcweeny_trace_target=get(spec, :mcweeny_trace_target, nothing),
+        mcweeny_trace_tolerance=get(spec, :mcweeny_trace_tolerance, nothing),
+        allow_unconverged_purification=get(
+            spec, :allow_unconverged_purification, false,
+        ),
         verify_spectral_bounds=get(spec, :verify_spectral_bounds, false),
         record_energy=true, verbose=get(spec, :verbose, :all), io=progress,
         overwrite_progress=false,
@@ -74,9 +92,9 @@ diagnostics = scf_diagnostics(sys)
 obs = observables_square(sys)
 
 open(joinpath(run_dir, "scf_history.csv"), "w") do io
-    write_csv_row(io, ("iteration", "trace", "vh_residual", "vf_residual", "rho_residual", "commutator_residual", "two_cycle_residual", "purification_converged", "purification_termination_reason", "purification_iterations", "rho_bond_dimension", "hartree_bond_dimension", "fock_bond_dimension", "effective_hamiltonian_bond_dimension", "energy_total"))
+    write_csv_row(io, ("iteration", "trace", "vh_residual", "vf_residual", "rho_residual", "commutator_residual", "two_cycle_residual", "purification_converged", "purification_termination_reason", "purification_iterations", "purification_selected_iteration", "rho_bond_dimension", "hartree_bond_dimension", "fock_bond_dimension", "effective_hamiltonian_bond_dimension", "energy_total"))
     for record in diagnostics.history
-        write_csv_row(io, (record.iteration, record.trace, record.vh_residual, record.vf_residual, record.rho_residual, record.commutator_residual, record.two_cycle_residual, record.purification_converged, record.purification_termination_reason, record.purification_iterations, record.rho_bond_dimension, record.hartree_bond_dimension, record.fock_bond_dimension, record.effective_hamiltonian_bond_dimension, record.energy_total))
+        write_csv_row(io, (record.iteration, record.trace, record.vh_residual, record.vf_residual, record.rho_residual, record.commutator_residual, record.two_cycle_residual, record.purification_converged, record.purification_termination_reason, record.purification_iterations, record.purification_selected_iteration, record.rho_bond_dimension, record.hartree_bond_dimension, record.fock_bond_dimension, record.effective_hamiltonian_bond_dimension, record.energy_total))
     end
 end
 open(joinpath(run_dir, "site_density.csv"), "w") do io

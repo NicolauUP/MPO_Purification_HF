@@ -24,6 +24,10 @@
     @test length(diagnostics.history) >= 2
     @test all(record -> record.purification_converged, diagnostics.history)
     @test all(record -> record.purification_termination_reason == :idempotency_threshold, diagnostics.history)
+    @test all(
+        record -> record.purification_selected_iteration == record.purification_iterations,
+        diagnostics.history,
+    )
     @test all(record -> isapprox(record.trace, 2.0; atol=3e-3), diagnostics.history)
     @test all(record -> !isnothing(record.energy_total), diagnostics.history)
     @test isfinite(diagnostics.history[end].vh_residual)
@@ -67,6 +71,7 @@ end
             two_cycle_residual,
             true,
             :converged,
+            10,
             10,
             4,
             5,

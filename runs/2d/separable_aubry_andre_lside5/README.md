@@ -165,3 +165,31 @@ Each result writes full-update wall time, allocations, the intermediate bond
 dimension, the next-density bond dimension, trace, and idempotency. Outputs
 are stored under
 `$MPO_RESULTS_ROOT/square_lside5_mcweeny_horner_comparison/`.
+
+## P1.10: best-iterate McWeeny selection
+
+Fixed-\(\mu\) McWeeny now retains the evaluated MPO with the lowest
+idempotency residual. If the `1e-6` production threshold is not reached, the
+solver returns that best iterate with `converged=false` instead of returning a
+later deteriorated state. `PurificationResult.selected_iteration` and the
+`purification_selected_iteration` SCF-history column identify the chosen
+state; `iterations` still records the total work performed.
+
+Horner remains opt-in for an SCF campaign:
+
+```julia
+mcweeny_form = :horner
+```
+
+A canonical trace guard is also opt-in and requires both fields:
+
+```julia
+mcweeny_trace_target = 512.0
+mcweeny_trace_tolerance = 1e-3
+```
+
+The target is deliberately not inferred from `params.density`, because
+unconstrained fixed-\(\mu\) McWeeny must remain grand-canonical. A
+best-iterate result that did not meet `1e-6` remains nonconverged; a campaign
+must explicitly set `allow_unconverged_purification=true` if it intends to
+continue SCF with a separately justified practical tolerance.

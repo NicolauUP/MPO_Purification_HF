@@ -52,6 +52,7 @@ struct SCFIterationRecord
     purification_converged::Bool
     purification_termination_reason::Symbol
     purification_iterations::Int
+    purification_selected_iteration::Int
     rho_bond_dimension::Union{Nothing,Int}
     hartree_bond_dimension::Union{Nothing,Int}
     fock_bond_dimension::Union{Nothing,Int}
