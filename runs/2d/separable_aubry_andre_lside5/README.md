@@ -208,3 +208,18 @@ sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
 The run uses `maxdim=256`, `itensors_tol=1e-14`, 50 SP2 steps, half filling,
 and the safe fixed-Hamiltonian interval `[-4.75,4.75]`. It performs no SCF
 and writes to `$MPO_RESULTS_ROOT/square_lside5_sp2_gap4/maxdim_256/`.
+
+## P1.12: SP2 gaps 1 and 2 with cap control
+
+Run gaps `1` and `2` at both `maxdim=256` and `384`:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p1_12_sp2_gap1_gap2_cap_ladder.slurm
+```
+
+The four array tasks hold the cutoff at `1e-14`, use 50 SP2 steps, half
+filling, and the common safe interval `[-4.25,4.25]`. The output hierarchy is
+`$MPO_RESULTS_ROOT/square_lside5_sp2_gap1_gap2/<gap>/<maxdim>/`. Comparing
+the two caps distinguishes a gap-limited projector from a cap-limited SP2
+trajectory.
