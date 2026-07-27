@@ -223,3 +223,20 @@ filling, and the common safe interval `[-4.25,4.25]`. The output hierarchy is
 `$MPO_RESULTS_ROOT/square_lside5_sp2_gap1_gap2/<gap>/<maxdim>/`. Comparing
 the two caps distinguishes a gap-limited projector from a cap-limited SP2
 trajectory.
+
+## P2.1: gap-1 SP2 versus exact diagonalization
+
+Compare the converged gap-1 SP2 projectors at both caps with an independently
+constructed dense `1024 x 1024` occupied projector:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p2_1_sp2_dense_gap1.slurm
+```
+
+The two array tasks use `maxdim=256` and `384`. Each reconstructs and
+diagonalizes the fixed Hamiltonian directly, then records all site-density
+and nearest-neighbor bond-order errors, checkerboard order, one-body energy,
+trace, idempotency, Hermiticity, and stationarity. The MPO is not converted
+to a full dense matrix. Outputs are written below
+`$MPO_RESULTS_ROOT/square_lside5_sp2_dense_gap1/`.
