@@ -44,7 +44,11 @@ For a larger MPO cap, override it at submission, for example
 The CUDA pilot keeps SP2 purification and the effective-Hamiltonian diagnostics
 on the GPU. Density matrices are transferred to the CPU for the current
 Hartree/Fock extraction kernels, and the resulting fields are transferred back
-to the GPU. The phase log measures this hybrid workflow directly.
+to the GPU. The phase log measures this hybrid workflow directly, including
+the two transfer directions and per-iteration GPU free, used, and total
+memory. Scaling submissions explicitly select
+`--square-fock-method binary_carry` so their provenance does not depend on the
+package default.
 
 Submit the calibrated `L_side=6` case with:
 

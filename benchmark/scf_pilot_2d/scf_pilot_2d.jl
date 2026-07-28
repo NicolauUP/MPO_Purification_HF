@@ -44,6 +44,7 @@ function parse_arguments(arguments)
         scf_mixing=0.5, scf_tol=0.1, scf_max_iterations=30,
         backend=:cpu, sp2_idempotency_tolerance=1e-3,
         sp2_relative_trace_tolerance=1e-6, observables=:compact,
+        square_fock_method=:binary_carry,
     )
     index = 1
     while index <= length(arguments)
@@ -70,6 +71,7 @@ function parse_arguments(arguments)
         argument == "--sp2-idempotency-tolerance" && (config = merge(config, (sp2_idempotency_tolerance=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--sp2-relative-trace-tolerance" && (config = merge(config, (sp2_relative_trace_tolerance=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--observables" && (config = merge(config, (observables=Symbol(lowercase(arguments[index + 1])),)); index += 2; continue)
+        argument == "--square-fock-method" && (config = merge(config, (square_fock_method=Symbol(lowercase(arguments[index + 1])),)); index += 2; continue)
         argument == "--help" && return nothing
         throw(ArgumentError("unknown argument $argument; use --help"))
     end
@@ -80,6 +82,9 @@ function parse_arguments(arguments)
     config.backend in (:cpu, :cuda) || throw(ArgumentError("--backend must be cpu or cuda"))
     config.observables in (:compact, :full) ||
         throw(ArgumentError("--observables must be compact or full"))
+    config.square_fock_method in (:tci, :binary_carry) || throw(ArgumentError(
+        "--square-fock-method must be tci or binary_carry",
+    ))
     all(isfinite, (config.tx, config.ty, config.U, config.density, config.potential_amplitude, config.seed_amplitude, config.tci_tol, config.itensors_tol, config.padding, config.scf_mixing, config.scf_tol)) || throw(ArgumentError("all floating-point inputs must be finite"))
     config.potential_amplitude >= 0 || throw(ArgumentError("potential amplitude must be nonnegative"))
     config.seed_amplitude >= 0 || throw(ArgumentError("seed amplitude must be nonnegative"))
@@ -139,6 +144,7 @@ function _write_metadata(path, config, params, bounds)
         println(io, "sp2_idempotency_tolerance = $(config.sp2_idempotency_tolerance)")
         println(io, "sp2_relative_trace_tolerance = $(config.sp2_relative_trace_tolerance)")
         println(io, "observables = ", _toml_string(config.observables))
+        println(io, "square_fock_method = ", _toml_string(config.square_fock_method))
         println(io, "spectral_lower = $(bounds[1])")
         println(io, "spectral_upper = $(bounds[2])")
     end
@@ -347,6 +353,7 @@ function run_pilot(config)
     to_device = config.backend == :cuda ? CUDA_BACKEND.cu : identity
     to_host = config.backend == :cuda ? ITensors.cpu : identity
     synchronize_backend = config.backend == :cuda ? CUDA_BACKEND.synchronize : (() -> nothing)
+    gpu_total_memory = config.backend == :cuda ? CUDA_BACKEND.total_memory() : 0
     sys = System(params)
     phase_path = joinpath(output, "phase_timings.csv")
     converged = open(joinpath(output, "progress.txt"), "w") do progress
@@ -359,7 +366,8 @@ function run_pilot(config)
                 "measured_iteration_time_s", "purification_iterations",
                 "rho_bond_dimension", "hartree_bond_dimension",
                 "fock_bond_dimension", "effective_hamiltonian_bond_dimension",
-                "gpu_free_memory_bytes",
+                "gpu_free_memory_bytes", "gpu_used_memory_bytes",
+                "gpu_total_memory_bytes",
             ))
             phase_callback = record -> begin
                 free_memory = config.backend == :cuda ? CUDA_BACKEND.free_memory() : 0
@@ -373,12 +381,14 @@ function run_pilot(config)
                     record.purification_iterations, record.rho_bond_dimension,
                     record.hartree_bond_dimension, record.fock_bond_dimension,
                     record.effective_hamiltonian_bond_dimension, free_memory,
+                    gpu_total_memory - free_memory, gpu_total_memory,
                 ))
                 flush(phases)
             end
             run_scf!(
                 sys, bounds...;
                 purification_method=:sp2,
+                square_fock_method=config.square_fock_method,
                 sp2_idempotency_tolerance=config.sp2_idempotency_tolerance,
                 sp2_trace_tolerance=config.sp2_relative_trace_tolerance *
                     round(Int, params.density * 2^params.L),
@@ -441,7 +451,7 @@ function main(arguments)
     config = parse_arguments(arguments)
     if isnothing(config)
         println("Usage: scf_pilot_2d.jl --output DIRECTORY [options]")
-        println("Options: --side-level 1..10 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda --observables compact|full")
+        println("Options: --side-level 1..10 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda --observables compact|full --square-fock-method tci|binary_carry")
         return
     end
     run_pilot(config)

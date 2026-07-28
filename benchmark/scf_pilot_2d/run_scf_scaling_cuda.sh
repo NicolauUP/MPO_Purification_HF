@@ -56,6 +56,7 @@ MPO_CUDA_RUNTIME_VERSION="$cuda_runtime_version" \
   benchmark/scf_pilot_2d/scf_pilot_2d.jl \
   --output "$OUTPUT_DIR" \
   --backend cuda \
+  --square-fock-method binary_carry \
   --side-level "$side_level" \
   --tx -0.6 \
   --ty -0.35 \
