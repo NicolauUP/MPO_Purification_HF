@@ -15,6 +15,21 @@ using MPO_MeanField
 using Printf
 using SHA
 
+function _requested_cuda_backend(arguments)
+    index = findfirst(==("--backend"), arguments)
+    return !isnothing(index) && index < length(arguments) &&
+        lowercase(arguments[index + 1]) == "cuda"
+end
+
+# Load CUDA before `run_pilot` is defined. Loading it with `@eval` from inside
+# that compiled function creates a newer world-age binding on Julia 1.12.
+const CUDA_BACKEND = if _requested_cuda_backend(ARGS)
+    @eval import CUDA
+    CUDA
+else
+    nothing
+end
+
 _csv(value) = "\"" * replace(string(value), '\"' => "\"\"") * "\""
 _row(io, values) = println(io, join(_csv.(values), ','))
 _toml_string(value) = "\"" * replace(string(value), '\"' => "\\\"") * "\""
@@ -196,12 +211,13 @@ function run_pilot(config)
     bounds = square_scf_spectral_bounds(params; potential_bounds=potential_bounds, margin=config.padding)
     _write_metadata(joinpath(output, "metadata.toml"), config, params, bounds)
     if config.backend == :cuda
-        @eval using CUDA
-        CUDA.functional() || error("CUDA is not functional on this node")
+        isnothing(CUDA_BACKEND) &&
+            error("CUDA backend must be selected with the command-line option --backend cuda")
+        CUDA_BACKEND.functional() || error("CUDA is not functional on this node")
     end
-    to_device = config.backend == :cuda ? CUDA.cu : identity
+    to_device = config.backend == :cuda ? CUDA_BACKEND.cu : identity
     to_host = config.backend == :cuda ? ITensors.cpu : identity
-    synchronize_backend = config.backend == :cuda ? CUDA.synchronize : (() -> nothing)
+    synchronize_backend = config.backend == :cuda ? CUDA_BACKEND.synchronize : (() -> nothing)
     sys = System(params)
     phase_path = joinpath(output, "phase_timings.csv")
     converged = open(joinpath(output, "progress.txt"), "w") do progress
@@ -216,7 +232,7 @@ function run_pilot(config)
                 "gpu_free_memory_bytes",
             ))
             phase_callback = record -> begin
-                free_memory = config.backend == :cuda ? CUDA.free_memory() : 0
+                free_memory = config.backend == :cuda ? CUDA_BACKEND.free_memory() : 0
                 _row(phases, (
                     record.iteration, record.initialization_time_s,
                     record.purification_time_s, record.density_to_host_time_s,
@@ -249,9 +265,9 @@ function run_pilot(config)
     if config.backend == :cuda
         synchronize_backend()
         open(joinpath(output, "cuda_status.txt"), "w") do io
-            CUDA.versioninfo(io)
+            CUDA_BACKEND.versioninfo(io)
             println(io)
-            CUDA.pool_status(io)
+            CUDA_BACKEND.pool_status(io)
         end
         sys.H0 = to_host(sys.H0)
         sys.VH = to_host(sys.VH)
