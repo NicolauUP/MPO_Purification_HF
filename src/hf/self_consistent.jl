@@ -54,6 +54,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     verify_spectral_bounds::Bool=false,
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:sp2,
+    square_fock_method::Symbol=:tci,
     sp2_idempotency_tolerance::Real=1e-3,
     sp2_trace_tolerance::Union{Nothing,Real}=nothing,
     chemical_potential::Union{Nothing,Real}=nothing,
@@ -78,6 +79,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
     _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
     stable_iterations > 0 || throw(ArgumentError("stable_iterations must be positive"))
+    square_fock_method in (:tci, :binary_carry) || throw(ArgumentError(
+        "square_fock_method must be :tci or :binary_carry, got $square_fock_method",
+    ))
 
 
     if verbose == :all
@@ -203,7 +207,9 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
 
         # Step 2: Extract Hartree potential
         mean_fields, mean_field_time = timed_phase(
-            () -> _extract_mean_fields_with_components(sys),
+            () -> _extract_mean_fields_with_components(
+                sys; square_fock_method=square_fock_method,
+            ),
         )
         vh_mpo_cpu, vf_mpo_cpu, fock_components = mean_fields
 

@@ -894,18 +894,30 @@ function extract_fock_mpo_square_vertical(sys::System)
 end
 
 """
-    extract_mean_fields(sys)
+    extract_mean_fields(sys; square_fock_method=:tci)
 
 Return `(VH, VF)` using the geometry-specific nearest-neighbour Hartree/Fock
 implementation for `sys`. Square `VF` is the sum of independently constructed
-horizontal and vertical exchange fields.
+horizontal and vertical exchange fields. `square_fock_method` may be `:tci`
+or `:binary_carry`; it has no effect for one-dimensional systems.
 """
-function _extract_mean_fields_with_components(sys::System)
+function _extract_mean_fields_with_components(
+    sys::System;
+    square_fock_method::Symbol=:tci,
+)
+    square_fock_method in (:tci, :binary_carry) || throw(ArgumentError(
+        "square_fock_method must be :tci or :binary_carry, got $square_fock_method",
+    ))
     if sys.params isa Parameters1D
         return extract_hartree_mpo_1d(sys), extract_fock_mpo_1d(sys), nothing
     elseif sys.params isa ParametersSquare
-        horizontal = extract_fock_mpo_square_horizontal(sys)
-        vertical = extract_fock_mpo_square_vertical(sys)
+        if square_fock_method == :tci
+            horizontal = extract_fock_mpo_square_horizontal(sys)
+            vertical = extract_fock_mpo_square_vertical(sys)
+        else
+            horizontal = extract_fock_mpo_binary_carry_square_horizontal(sys)
+            vertical = extract_fock_mpo_binary_carry_square_vertical(sys)
+        end
         fock = +(horizontal, vertical;
             cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
         )
@@ -915,8 +927,10 @@ function _extract_mean_fields_with_components(sys::System)
     throw(ArgumentError("no mean-field extractor for $(typeof(sys.params))"))
 end
 
-function extract_mean_fields(sys::System)
-    hartree, fock, _ = _extract_mean_fields_with_components(sys)
+function extract_mean_fields(sys::System; square_fock_method::Symbol=:tci)
+    hartree, fock, _ = _extract_mean_fields_with_components(
+        sys; square_fock_method=square_fock_method,
+    )
     return hartree, fock
 end
 

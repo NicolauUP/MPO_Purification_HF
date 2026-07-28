@@ -282,7 +282,9 @@ end
 
     rho = dense_matrix(sys.ρ, sys)
     _, fock = extract_mean_fields(sys)
+    _, binary_fock = extract_mean_fields(sys; square_fock_method=:binary_carry)
     observed = dense_matrix(fock, sys)
+    binary_observed = dense_matrix(binary_fock, sys)
     expected = zeros(16, 16)
     for (site, neighbour, _) in square_undirected_bonds(params.L)
         expected[site, neighbour] = -params.U * real(rho[site, neighbour])
@@ -291,5 +293,9 @@ end
         @test isapprox(observed[neighbour, site], expected[neighbour, site]; atol=1e-10, rtol=1e-10)
     end
     @test observed ≈ expected atol=1e-10
+    @test binary_observed ≈ expected atol=1e-10
+    @test binary_observed ≈ observed atol=1e-10
     @test opnorm(observed - observed') < 1e-12
+    @test opnorm(binary_observed - binary_observed') < 1e-12
+    @test_throws ArgumentError extract_mean_fields(sys; square_fock_method=:unknown)
 end
