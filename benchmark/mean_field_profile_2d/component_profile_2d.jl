@@ -59,7 +59,9 @@ function run_profile(config)
     sys, purification, bounds = preparation.value
 
     println("Warming all mean-field component kernels outside timing")
-    warm_hartree = extract_hartree_mpo_binary_carry_square_adjacency(sys)
+    warm_hartree = extract_hartree_mpo_binary_carry_square_adjacency(
+        sys; cutoff=0.0, maxdim=typemax(Int),
+    )
     warm_hartree = nothing
     GC.gc(true)
     warm_horizontal = extract_fock_mpo_square_horizontal(sys)
@@ -74,7 +76,9 @@ function run_profile(config)
     warm_horizontal_carry = warm_vertical_carry = nothing
     GC.gc(true)
 
-    hartree = timed_field(() -> extract_hartree_mpo_binary_carry_square_adjacency(sys))
+    hartree = timed_field(() -> extract_hartree_mpo_binary_carry_square_adjacency(
+        sys; cutoff=0.0, maxdim=typemax(Int),
+    ))
     horizontal = timed_field(() -> extract_fock_mpo_square_horizontal(sys))
     vertical = timed_field(() -> extract_fock_mpo_square_vertical(sys))
     fock_sum = timed_field(() -> +(

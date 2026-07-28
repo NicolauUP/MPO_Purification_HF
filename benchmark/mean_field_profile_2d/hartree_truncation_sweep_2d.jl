@@ -69,9 +69,13 @@ function run_sweep(config)
     CURRENT_SYSTEM[] = sys
 
     println("Warming untruncated adjacency application outside timing")
-    extract_hartree_mpo_binary_carry_square_adjacency(sys)
+    extract_hartree_mpo_binary_carry_square_adjacency(
+        sys; cutoff=0.0, maxdim=typemax(Int),
+    )
     reference = measure_field(
-        () -> extract_hartree_mpo_binary_carry_square_adjacency(sys),
+        () -> extract_hartree_mpo_binary_carry_square_adjacency(
+            sys; cutoff=0.0, maxdim=typemax(Int),
+        ),
     )
     open(joinpath(output, "summary.csv"), "w") do io
         row(io, (

@@ -464,20 +464,27 @@ function square_neighbour_adjacency_mpo(sites::Vector{<:Index})
 end
 
 """
-    _apply_square_neighbour_adjacency(tensors, sites)
+    _apply_square_neighbour_adjacency(tensors, sites; cutoff, maxdim)
 
-Apply [`square_neighbour_adjacency_mpo`](@ref) without numerical truncation.
-The returned QTT tensors represent `A_nn * n`; truncating this application
-would defeat the purpose of avoiding the four-field MPO addition.
+Apply [`square_neighbour_adjacency_mpo`](@ref) to the density QTT. The
+compression policy is explicit because the raw product can have a much larger
+bond dimension than the physical Hartree field.
 """
 function _apply_square_neighbour_adjacency(
     tensors::Vector{ITensor},
     sites::Vector{<:Index},
+    ;
+    cutoff::Real,
+    maxdim::Integer,
 )
+    isfinite(cutoff) && cutoff >= 0 || throw(ArgumentError(
+        "square Hartree cutoff must be finite and nonnegative",
+    ))
+    maxdim > 0 || throw(ArgumentError("square Hartree maxdim must be positive"))
     density = MPS(tensors)
     field = apply(square_neighbour_adjacency_mpo(sites), density;
-        cutoff=0.0,
-        maxdim=typemax(Int),
+        cutoff=cutoff,
+        maxdim=maxdim,
     )
     return copy(field.data)
 end
@@ -518,22 +525,36 @@ function extract_hartree_mpo_binary_carry_square(sys::System)
 end
 
 """
-    extract_hartree_mpo_binary_carry_square_adjacency(sys)
+    extract_hartree_mpo_binary_carry_square_adjacency(
+        sys; cutoff=1e-12, maxdim=64,
+    )
 
 Fused square Hartree extractor. It constructs the density diagonal once and
-evaluates `U * A_nn * n` in a single, untruncated QTT MPO--MPS application.
+evaluates `U * A_nn * n` in a single QTT MPO--MPS application.
 Unlike [`extract_hartree_mpo_binary_carry_square`](@ref), it does not form or
-compress a generic sum of four global diagonal MPOs. This is the square
-Hartree path used by [`extract_mean_fields`](@ref) and `run_scf!`.
+compress a generic sum of four global diagonal MPOs.
+
+The default compression policy is based on the million-site square benchmark:
+`cutoff=1e-12, maxdim=64` reduced the raw field from bond dimension 512 to 17
+while keeping the largest sampled local-field error below `5e-5`. Pass
+`cutoff=0, maxdim=typemax(Int)` to recover the untruncated diagnostic path.
+This is the square Hartree path used by [`extract_mean_fields`](@ref) and
+`run_scf!`.
 """
-function extract_hartree_mpo_binary_carry_square_adjacency(sys::System)
+function extract_hartree_mpo_binary_carry_square_adjacency(
+    sys::System;
+    cutoff::Real=1e-12,
+    maxdim::Integer=64,
+)
     sys.params isa ParametersSquare || throw(ArgumentError(
         "extract_hartree_mpo_binary_carry_square_adjacency requires ParametersSquare",
     ))
     params = sys.params
     iszero(params.U) && return zero_mpo(sys.sites)
     density_tensors = _density_diagonal_qtt_tensors(sys.ρ, sys.sites)
-    field_tensors = _apply_square_neighbour_adjacency(density_tensors, sys.sites)
+    field_tensors = _apply_square_neighbour_adjacency(
+        density_tensors, sys.sites; cutoff=cutoff, maxdim=maxdim,
+    )
     field = _diagonal_mpo_from_qtt_tensors(
         field_tensors, sys.sites, params; symmetrize=false,
     )
