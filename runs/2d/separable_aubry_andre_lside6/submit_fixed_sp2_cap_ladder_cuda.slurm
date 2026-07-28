@@ -19,6 +19,11 @@ module load julia/1.12.6
 module load nvidia-hpc-sdk/24.11
 
 REPOSITORY_ROOT="${SLURM_SUBMIT_DIR:?submit from MPO_Purification_HF}"
+NVCC_PATH="$(readlink -f "$(command -v nvcc)")"
+CUDA_TOOLKIT_ROOT="$(dirname "$(dirname "$NVCC_PATH")")"
+export CUDA_PATH="$CUDA_TOOLKIT_ROOT"
+export CUDA_HOME="$CUDA_TOOLKIT_ROOT"
+export CUDA_ROOT="$CUDA_TOOLKIT_ROOT"
 export JULIA_DEPOT_PATH="${JULIA_DEPOT_PATH:-/gpfs/projects/epor78/cluster_depot}"
 export JULIA_PKG_PRECOMPILE_AUTO=0
 export JULIA_NUM_THREADS=1
@@ -34,6 +39,7 @@ cd "$REPOSITORY_ROOT"
 mkdir -p "$(dirname "$output")"
 echo "host=$(hostname)"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
+echo "CUDA_PATH=$CUDA_PATH"
 echo "fixed-H SP2 maxdim=$maxdim output=$output"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
 
