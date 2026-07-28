@@ -51,6 +51,19 @@ MPO_CUDA_RUNTIME_VERSION="$cuda_runtime_version" \
       local_toolkit=true,
   )'
 
+GPU_MEMORY_LOG="$OUTPUT_DIR/gpu_memory_timeseries.csv"
+echo '"timestamp","memory_used_mib","memory_free_mib"' > "$GPU_MEMORY_LOG"
+nvidia-smi \
+  --query-gpu=timestamp,memory.used,memory.free \
+  --format=csv,noheader,nounits \
+  --loop=1 >> "$GPU_MEMORY_LOG" &
+GPU_SAMPLER_PID=$!
+cleanup_gpu_sampler() {
+  kill "$GPU_SAMPLER_PID" 2>/dev/null || true
+  wait "$GPU_SAMPLER_PID" 2>/dev/null || true
+}
+trap cleanup_gpu_sampler EXIT
+
 /usr/bin/time -v -o "$OUTPUT_DIR/process_time.txt" \
   julia --startup-file=no --project=. \
   benchmark/scf_pilot_2d/scf_pilot_2d.jl \

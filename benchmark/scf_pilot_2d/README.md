@@ -48,7 +48,9 @@ to the GPU. The phase log measures this hybrid workflow directly, including
 the two transfer directions and per-iteration GPU free, used, and total
 memory. Scaling submissions explicitly select
 `--square-fock-method binary_carry` so their provenance does not depend on the
-package default.
+package default. `gpu_memory_timeseries.csv` samples device used/free memory
+once per second, capturing transient peaks that the end-of-iteration phase
+records may miss.
 
 Submit the calibrated `L_side=6` case with:
 
