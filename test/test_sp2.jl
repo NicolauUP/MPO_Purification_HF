@@ -73,12 +73,28 @@ end
     @test default_result.converged
 
     scf_sys = System(params)
+    phase_records = NamedTuple[]
+    synchronization_calls = Ref(0)
     @test run_scf!(
         scf_sys, bounds...;
         verbose=:nothing,
         verify_spectral_bounds=true,
         purification_method=:sp2,
+        sp2_idempotency_tolerance=1e-4,
+        sp2_trace_tolerance=1e-6,
+        phase_callback=record -> push!(phase_records, record),
+        phase_synchronize=() -> (synchronization_calls[] += 1),
     )
+    @test length(phase_records) == length(scf_diagnostics(scf_sys).history)
+    @test synchronization_calls[] > 0
+    @test all(record -> record.initialization_time_s >= 0, phase_records)
+    @test all(record -> record.purification_time_s >= 0, phase_records)
+    @test all(record -> record.density_to_host_time_s >= 0, phase_records)
+    @test all(record -> record.mean_field_time_s >= 0, phase_records)
+    @test all(record -> record.fields_to_device_time_s >= 0, phase_records)
+    @test all(record -> record.device_diagnostics_time_s >= 0, phase_records)
+    @test all(record -> record.measured_iteration_time_s >= 0, phase_records)
+    @test all(record -> record.purification_iterations > 0, phase_records)
     @test opnorm(dense_matrix(scf_sys.ρ, scf_sys) - exact) < 2e-3
     returned_hamiltonian = dense_matrix(scf_sys.H0, scf_sys) +
         dense_matrix(scf_sys.VH, scf_sys) + dense_matrix(scf_sys.VF, scf_sys)

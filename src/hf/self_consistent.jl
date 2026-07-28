@@ -54,6 +54,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     verify_spectral_bounds::Bool=false,
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:sp2,
+    sp2_idempotency_tolerance::Real=1e-3,
+    sp2_trace_tolerance::Union{Nothing,Real}=nothing,
     chemical_potential::Union{Nothing,Real}=nothing,
     mcweeny_form::Symbol=:standard,
     mcweeny_trace_target::Union{Nothing,Real}=nothing,
@@ -70,6 +72,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     overwrite_progress::Bool=io isa Base.TTY,
     to_gpu=identity,
     to_cpu=identity,
+    phase_callback::Union{Nothing,Function}=nothing,
+    phase_synchronize::Function=() -> nothing,
     cleanup= () -> nothing)
 
     _validate_gc_policy(gc_policy, gc_period, gc_threshold_bytes)
@@ -117,37 +121,54 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     else
         nothing
     end
+    timed_phase = function (operation)
+        if isnothing(phase_callback)
+            return operation(), NaN
+        end
+        phase_synchronize()
+        started = time_ns()
+        value = operation()
+        phase_synchronize()
+        return value, (time_ns() - started) / 1e9
+    end
     for iter in 1:params.scf_max_iterations
+        iteration_started = time_ns()
         # Step 1: Obtain density matrix!
-        ρ0_device = construct_rho_0(
-            sys, params, H_min, H_max;
-            to_gpu=to_gpu,
-            verify_spectral_bounds=verify_spectral_bounds,
-            safety_margin=spectral_safety_margin,
-            method=purification_method,
-            chemical_potential=chemical_potential,
-        )
+        ρ0_device, initialization_time = timed_phase() do
+            construct_rho_0(
+                sys, params, H_min, H_max;
+                to_gpu=to_gpu,
+                verify_spectral_bounds=verify_spectral_bounds,
+                safety_margin=spectral_safety_margin,
+                method=purification_method,
+                chemical_potential=chemical_potential,
+            )
+        end
         purification_verbose = verbose == :nothing ? 0 : 1
-        purification = perform_purification(
-            ρ0_device, params;
-            verbose=purification_verbose,
-            spectral_bounds=(H_min, H_max),
-            spectral_bounds_validation=(
-                verify_spectral_bounds ? :exact_small_system : :supplied_unverified
-            ),
-            method=purification_method,
-            chemical_potential=chemical_potential,
-            mcweeny_form=mcweeny_form,
-            mcweeny_identity_mpo=mcweeny_identity_mpo,
-            mcweeny_trace_target=mcweeny_trace_target,
-            mcweeny_trace_tolerance=mcweeny_trace_tolerance,
-            gc_policy=gc_policy,
-            gc_period=gc_period,
-            gc_threshold_bytes=gc_threshold_bytes,
-            device_cleanup=purification_cleanup,
-            io=io,
-            overwrite_progress=overwrite_progress,
-        )
+        purification, purification_time = timed_phase() do
+            perform_purification(
+                ρ0_device, params;
+                verbose=purification_verbose,
+                spectral_bounds=(H_min, H_max),
+                spectral_bounds_validation=(
+                    verify_spectral_bounds ? :exact_small_system : :supplied_unverified
+                ),
+                method=purification_method,
+                sp2_idempotency_tolerance=sp2_idempotency_tolerance,
+                sp2_trace_tolerance=sp2_trace_tolerance,
+                chemical_potential=chemical_potential,
+                mcweeny_form=mcweeny_form,
+                mcweeny_identity_mpo=mcweeny_identity_mpo,
+                mcweeny_trace_target=mcweeny_trace_target,
+                mcweeny_trace_tolerance=mcweeny_trace_tolerance,
+                gc_policy=gc_policy,
+                gc_period=gc_period,
+                gc_threshold_bytes=gc_threshold_bytes,
+                device_cleanup=purification_cleanup,
+                io=io,
+                overwrite_progress=overwrite_progress,
+            )
+        end
         if !purification.converged && !allow_unconverged_purification
             push!(history, SCFIterationRecord(
                 iter,
@@ -177,30 +198,30 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
         ρ_purified_device = purification.rho
 
         rho_previous = sys.ρ
-        sys.ρ = to_cpu(ρ_purified_device) #Ok updates rho!
-        #=
-        Verify how this to_cpu should be done! 
-        There are two options:
-        1. Move the purified density matrix back to CPU and then extract the Hartree potential
-        2. Extract the Hartree potential directly on the GPU and only move the resulting MPO back to CPU. 
-
-        Verify which one is more efficient. I believe 1 is ok, because TCI is scalar! 
-        TODO: Write to_cpu funcion! 
-        =#
+        rho_host, density_to_host_time = timed_phase(() -> to_cpu(ρ_purified_device))
+        sys.ρ = rho_host
 
         # Step 2: Extract Hartree potential
-        vh_mpo_cpu, vf_mpo_cpu, fock_components = _extract_mean_fields_with_components(sys)
+        mean_fields, mean_field_time = timed_phase(
+            () -> _extract_mean_fields_with_components(sys),
+        )
+        vh_mpo_cpu, vf_mpo_cpu, fock_components = mean_fields
 
-        vh_mpo = to_gpu(vh_mpo_cpu)
-        vf_mpo = to_gpu(vf_mpo_cpu)
-
+        device_fields, fields_to_device_time = timed_phase() do
+            (to_gpu(vh_mpo_cpu), to_gpu(vf_mpo_cpu))
+        end
+        vh_mpo, vf_mpo = device_fields
 
 
         # Step 4: Check convergence
-        H_effective = +(sys.H0, sys.VH, sys.VF;
-            cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
-        )
-        commutator_residual = _scf_commutator_residual(H_effective, ρ_purified_device, params)
+        device_diagnostics, device_diagnostics_time = timed_phase() do
+            H = +(sys.H0, sys.VH, sys.VF;
+                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+            )
+            residual = _scf_commutator_residual(H, ρ_purified_device, params)
+            (H, residual)
+        end
+        H_effective, commutator_residual = device_diagnostics
         if iter > 1
             vh_residual = _mpo_relative_change(vh_mpo, sys.VH, params)
             vf_residual = _mpo_relative_change(vf_mpo, sys.VF, params)
@@ -250,6 +271,24 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 io, "SCF", iter, params.scf_max_iterations, details;
                 overwrite=overwrite_progress,
             )
+        end
+        if !isnothing(phase_callback)
+            phase_synchronize()
+            phase_callback((
+                iteration=iter,
+                initialization_time_s=initialization_time,
+                purification_time_s=purification_time,
+                density_to_host_time_s=density_to_host_time,
+                mean_field_time_s=mean_field_time,
+                fields_to_device_time_s=fields_to_device_time,
+                device_diagnostics_time_s=device_diagnostics_time,
+                measured_iteration_time_s=(time_ns() - iteration_started) / 1e9,
+                purification_iterations=purification.iterations,
+                rho_bond_dimension=maxlinkdim(ρ_purified_device),
+                hartree_bond_dimension=maxlinkdim(vh_mpo),
+                fock_bond_dimension=maxlinkdim(vf_mpo),
+                effective_hamiltonian_bond_dimension=maxlinkdim(H_effective),
+            ))
         end
 
         current_record = history[end]
