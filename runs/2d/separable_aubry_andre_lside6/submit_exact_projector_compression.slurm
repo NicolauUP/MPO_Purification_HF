@@ -23,6 +23,9 @@ export MKL_NUM_THREADS=32
 export MPO_RESULTS_ROOT="${MPO_RESULTS_ROOT:?set an external result root before submitting}"
 
 output="${MPO_RESULTS_ROOT}/separable_aubry_andre_lside6_exact_projector/cutoff_1e-8"
+maxdims="128,256,512,1024"
+cutoff="1e-8"
+blas_threads="32"
 cd "$REPOSITORY_ROOT"
 mkdir -p "$(dirname "$output")"
 echo "host=$(hostname)"
@@ -32,4 +35,4 @@ echo "exact-projector output=$output"
   julia --startup-file=no --project=. \
   runs/common/compress_exact_square_projector_local.jl \
   runs/2d/separable_aubry_andre_lside6/campaign.jl \
-  1 128,256,512,1024 1e-8 "$output" 32
+  1 "$maxdims" "$cutoff" "$output" "$blas_threads"
