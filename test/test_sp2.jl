@@ -53,6 +53,17 @@ end
     @test strict_result.idempotency_residual < 1e-4
     @test strict_result.iterations >= result.iterations
 
+    relaxed_trace_result = perform_purification(
+        rho0, params;
+        verbose=0,
+        method=:sp2,
+        spectral_bounds=bounds,
+        sp2_trace_tolerance=1e-2,
+    )
+    @test relaxed_trace_result.converged
+    @test relaxed_trace_result.trace_error <= 1e-2
+    @test relaxed_trace_result.iterations <= result.iterations
+
     default_result = perform_purification(
         rho0, params;
         verbose=0,
@@ -86,5 +97,12 @@ end
         method=:sp2,
         spectral_bounds=bounds,
         sp2_idempotency_tolerance=0.0,
+    )
+    @test_throws ArgumentError perform_purification(
+        rho0, params;
+        verbose=0,
+        method=:sp2,
+        spectral_bounds=bounds,
+        sp2_trace_tolerance=-1.0,
     )
 end

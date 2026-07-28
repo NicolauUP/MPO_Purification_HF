@@ -14,6 +14,7 @@ function perform_purification(
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
     sp2_idempotency_tolerance::Real=1e-3,
+    sp2_trace_tolerance::Union{Nothing,Real}=nothing,
     chemical_potential::Union{Nothing,Real}=nothing,
     mcweeny_form::Symbol=:standard,
     mcweeny_identity_mpo::Union{Nothing,MPO}=nothing,
@@ -31,6 +32,7 @@ function perform_purification(
             io=io,
             overwrite_progress=overwrite_progress,
             idempotency_tolerance=sp2_idempotency_tolerance,
+            trace_tolerance=sp2_trace_tolerance,
             spectral_bounds=spectral_bounds,
             spectral_bounds_validation=spectral_bounds_validation,
         )

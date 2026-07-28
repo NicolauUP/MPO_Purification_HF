@@ -32,6 +32,7 @@ function perform_purification_sp2(
     io::IO=stdout,
     overwrite_progress::Bool=io isa Base.TTY,
     idempotency_tolerance::Real=1e-3,
+    trace_tolerance::Union{Nothing,Real}=nothing,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
 )
@@ -42,11 +43,18 @@ function perform_purification_sp2(
     idempotency_tolerance = Float64(idempotency_tolerance)
     isfinite(idempotency_tolerance) && idempotency_tolerance > 0 ||
         throw(ArgumentError("SP2 idempotency_tolerance must be finite and positive"))
+    if !isnothing(trace_tolerance)
+        trace_tolerance = Float64(trace_tolerance)
+        isfinite(trace_tolerance) && trace_tolerance > 0 ||
+            throw(ArgumentError("SP2 trace_tolerance must be finite and positive"))
+    end
 
     N = 2^params.L
     Ne = round(Int, N * params.density)
     0 < Ne < N || throw(ArgumentError("SP2 supports only 0 < Ne < N, got Ne=$Ne"))
-    trace_tolerance = _sp2_trace_tolerance(params, Ne)
+    branch_trace_tolerance = _sp2_trace_tolerance(params, Ne)
+    convergence_trace_tolerance = isnothing(trace_tolerance) ?
+        branch_trace_tolerance : trace_tolerance
     hermiticity_tolerance = _sp2_hermiticity_tolerance(params)
 
     verbose > 0 && println(io, "SP2 purifying N=$N, density=$(params.density), Ne=$Ne")
@@ -91,7 +99,7 @@ function perform_purification_sp2(
             )
         end
 
-        if abs(trace_value - Ne) <= trace_tolerance &&
+        if abs(trace_value - Ne) <= convergence_trace_tolerance &&
            idem < idempotency_tolerance && herm <= hermiticity_tolerance
             verbose > 0 && finish_iteration_progress(io, overwrite_progress)
             return purification_result(
@@ -126,7 +134,7 @@ function perform_purification_sp2(
         end
         previous_idempotency = idem
 
-        branch = _sp2_branch(trace_value, trace_squared, Ne, trace_tolerance)
+        branch = _sp2_branch(trace_value, trace_squared, Ne, branch_trace_tolerance)
         if branch == :square
             rho = rho_squared
         else
