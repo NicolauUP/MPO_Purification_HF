@@ -43,7 +43,7 @@ function parse_arguments(arguments)
         itensors_tol=1e-14, maxdim=256, steps=50, padding=0.5,
         scf_mixing=0.5, scf_tol=0.1, scf_max_iterations=30,
         backend=:cpu, sp2_idempotency_tolerance=1e-3,
-        sp2_relative_trace_tolerance=1e-6,
+        sp2_relative_trace_tolerance=1e-6, observables=:compact,
     )
     index = 1
     while index <= length(arguments)
@@ -69,6 +69,7 @@ function parse_arguments(arguments)
         argument == "--backend" && (config = merge(config, (backend=Symbol(lowercase(arguments[index + 1])),)); index += 2; continue)
         argument == "--sp2-idempotency-tolerance" && (config = merge(config, (sp2_idempotency_tolerance=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--sp2-relative-trace-tolerance" && (config = merge(config, (sp2_relative_trace_tolerance=parse(Float64, arguments[index + 1]),)); index += 2; continue)
+        argument == "--observables" && (config = merge(config, (observables=Symbol(lowercase(arguments[index + 1])),)); index += 2; continue)
         argument == "--help" && return nothing
         throw(ArgumentError("unknown argument $argument; use --help"))
     end
@@ -77,6 +78,8 @@ function parse_arguments(arguments)
     config.potential in (:none, :checkerboard) || throw(ArgumentError("--potential must be none or checkerboard"))
     config.seed in (:uniform, :checkerboard_plus, :checkerboard_minus) || throw(ArgumentError("--seed must be uniform, checkerboard_plus, or checkerboard_minus"))
     config.backend in (:cpu, :cuda) || throw(ArgumentError("--backend must be cpu or cuda"))
+    config.observables in (:compact, :full) ||
+        throw(ArgumentError("--observables must be compact or full"))
     all(isfinite, (config.tx, config.ty, config.U, config.density, config.potential_amplitude, config.seed_amplitude, config.tci_tol, config.itensors_tol, config.padding, config.scf_mixing, config.scf_tol)) || throw(ArgumentError("all floating-point inputs must be finite"))
     config.potential_amplitude >= 0 || throw(ArgumentError("potential amplitude must be nonnegative"))
     config.seed_amplitude >= 0 || throw(ArgumentError("seed amplitude must be nonnegative"))
@@ -135,6 +138,7 @@ function _write_metadata(path, config, params, bounds)
         println(io, "backend = ", _toml_string(config.backend))
         println(io, "sp2_idempotency_tolerance = $(config.sp2_idempotency_tolerance)")
         println(io, "sp2_relative_trace_tolerance = $(config.sp2_relative_trace_tolerance)")
+        println(io, "observables = ", _toml_string(config.observables))
         println(io, "spectral_lower = $(bounds[1])")
         println(io, "spectral_upper = $(bounds[2])")
     end
@@ -149,15 +153,47 @@ function _write_history(path, diagnostics)
     end
 end
 
+function _write_post_scf_timings(path, timings)
+    open(path, "w") do io
+        for name in propertynames(timings)
+            println(io, "$(name) = $(getfield(timings, name))")
+        end
+    end
+end
+
 function _probe_sites(side, L)
     coordinates = unique(((0, 0), (side - 1, 0), (0, side - 1), (side - 1, side - 1), (div(side, 2), div(side, 2))))
     [(x, y, MPO_MeanField.square_lattice_index(x, y, L)) for (x, y) in coordinates]
 end
 
-function _write_observables(path, sys, converged, bounds)
+function _compact_density_summary(sys)
     params = sys.params
     N = 2^params.L
-    side = 2^div(params.L, 2)
+    checkerboard = MPO_MeanField.diagonal_mpo_from_function(
+        z -> begin
+            x, y = MPO_MeanField.square_lattice_decoder(Int(z), params.L)
+            iseven(x + y) ? 1.0 : -1.0
+        end,
+        Float64,
+        sys.sites,
+        params.tci_tol,
+    )
+    weighted_density = apply(
+        checkerboard, sys.ρ;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    return (
+        particle_number=real(tr(sys.ρ)),
+        checkerboard_order=real(tr(weighted_density)) / N,
+        density_min=nothing,
+        density_max=nothing,
+    )
+end
+
+function _full_density_summary(sys)
+    params = sys.params
+    N = 2^params.L
     density_sum = 0.0
     density_min, density_max = Inf, -Inf
     checkerboard_sum = 0.0
@@ -169,22 +205,107 @@ function _write_observables(path, sys, converged, bounds)
         density_max = max(density_max, value)
         checkerboard_sum += iseven(x + y) ? value : -value
     end
-    energy = nearest_neighbor_hf_energy_square(sys)
-    effective_hamiltonian = +(sys.H0, sys.VH, sys.VF; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-    idempotency = MPO_MeanField._mpo_relative_change(
-        apply(sys.ρ, sys.ρ; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim), sys.ρ, params,
+    return (
+        particle_number=density_sum,
+        checkerboard_order=checkerboard_sum / N,
+        density_min=density_min,
+        density_max=density_max,
     )
-    stationarity = MPO_MeanField._scf_commutator_residual(effective_hamiltonian, sys.ρ, params)
+end
+
+function _compact_energy(sys)
+    params = sys.params
+    final_hartree, final_fock, _ = MPO_MeanField._extract_mean_fields_with_components(sys)
+    H0rho = apply(
+        sys.H0, sys.ρ;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    VHrho = apply(
+        final_hartree, sys.ρ;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    VFrho = apply(
+        final_fock, sys.ρ;
+        cutoff=params.itensors_tol,
+        maxdim=params.itensors_maxdim,
+    )
+    kinetic = real(tr(H0rho))
+    hartree = real(tr(VHrho)) / 2
+    fock = real(tr(VFrho)) / 2
+    interaction = hartree + fock
+    return (
+        kinetic=kinetic,
+        hartree=hartree,
+        fock=fock,
+        interaction=interaction,
+        total=kinetic + interaction,
+    )
+end
+
+function _measure_probes(sys, side, L)
+    [(
+        x=x,
+        y=y,
+        site=site,
+        density=real(MatrixChecker(
+            sys.ρ, sys.sites, site, site, sys.bra_states, sys.ket_states,
+        )),
+        stored_hartree=real(MatrixChecker(
+            sys.VH, sys.sites, site, site, sys.bra_states, sys.ket_states,
+        )),
+    ) for (x, y, site) in _probe_sites(side, L)]
+end
+
+function _write_observables(path, sys, converged, bounds; mode=:compact)
+    params = sys.params
+    N = 2^params.L
+    side = 2^div(params.L, 2)
+    density_timing = @timed(
+        mode == :compact ? _compact_density_summary(sys) : _full_density_summary(sys)
+    )
+    density = density_timing.value
+    energy_timing = @timed(
+        mode == :compact ? _compact_energy(sys) : nearest_neighbor_hf_energy_square(sys)
+    )
+    energy = energy_timing.value
+    effective_timing = @timed(
+        +(sys.H0, sys.VH, sys.VF;
+            cutoff=params.itensors_tol,
+            maxdim=params.itensors_maxdim,
+        )
+    )
+    effective_hamiltonian = effective_timing.value
+    idempotency_timing = @timed MPO_MeanField._mpo_relative_change(
+        apply(sys.ρ, sys.ρ; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        sys.ρ,
+        params,
+    )
+    idempotency = idempotency_timing.value
+    stationarity_timing = @timed MPO_MeanField._scf_commutator_residual(
+        effective_hamiltonian, sys.ρ, params,
+    )
+    stationarity = stationarity_timing.value
+    probes_timing = @timed _measure_probes(sys, side, params.L)
+    probes = probes_timing.value
     open(path, "w") do io
+        println(io, "observable_mode = ", _toml_string(mode))
+        println(io, "energy_evaluation = ", _toml_string(
+            mode == :compact ? "fresh_mean_field_trace" : "explicit_nearest_neighbor",
+        ))
         println(io, "scf_converged = $(converged)")
         println(io, "scf_termination_reason = ", _toml_string(scf_diagnostics(sys).termination_reason))
         println(io, "spectral_lower = $(bounds[1])")
         println(io, "spectral_upper = $(bounds[2])")
-        println(io, "particle_number = $(density_sum)")
-        println(io, "particle_number_error = $(density_sum - round(Int, params.density * N))")
-        println(io, "density_min = $(density_min)")
-        println(io, "density_max = $(density_max)")
-        println(io, "checkerboard_density_order = $(checkerboard_sum / N)")
+        println(io, "particle_number = $(density.particle_number)")
+        println(io, "particle_number_error = $(density.particle_number - round(Int, params.density * N))")
+        println(io, "density_extrema_computed = $(mode == :full)")
+        if mode == :full
+            println(io, "density_min = $(density.density_min)")
+            println(io, "density_max = $(density.density_max)")
+        end
+        println(io, "checkerboard_density_order = $(density.checkerboard_order)")
         println(io, "idempotency_residual = $(idempotency)")
         println(io, "stationarity_residual = $(stationarity)")
         println(io, "rho_bond_dimension = $(maxlinkdim(sys.ρ))")
@@ -194,13 +315,21 @@ function _write_observables(path, sys, converged, bounds)
         for name in (:kinetic, :hartree, :fock, :interaction, :total)
             println(io, "energy_$(name) = $(getfield(energy, name))")
         end
-        for (x, y, site) in _probe_sites(side, params.L)
+        for probe in probes
             println(io, "\n[[density_probes]]")
-            println(io, "x = $x\ny = $y\nsite = $site")
-            println(io, "density = ", real(MatrixChecker(sys.ρ, sys.sites, site, site, sys.bra_states, sys.ket_states)))
-            println(io, "stored_hartree = ", real(MatrixChecker(sys.VH, sys.sites, site, site, sys.bra_states, sys.ket_states)))
+            println(io, "x = $(probe.x)\ny = $(probe.y)\nsite = $(probe.site)")
+            println(io, "density = $(probe.density)")
+            println(io, "stored_hartree = $(probe.stored_hartree)")
         end
     end
+    return (
+        density_summary_time_s=density_timing.time,
+        energy_time_s=energy_timing.time,
+        effective_hamiltonian_time_s=effective_timing.time,
+        idempotency_time_s=idempotency_timing.time,
+        stationarity_time_s=stationarity_timing.time,
+        probes_time_s=probes_timing.time,
+    )
 end
 
 function run_pilot(config)
@@ -226,6 +355,7 @@ function run_pilot(config)
                 "iteration", "initialization_time_s", "purification_time_s",
                 "density_to_host_time_s", "mean_field_time_s",
                 "fields_to_device_time_s", "device_diagnostics_time_s",
+                "residuals_time_s", "mixing_time_s",
                 "measured_iteration_time_s", "purification_iterations",
                 "rho_bond_dimension", "hartree_bond_dimension",
                 "fock_bond_dimension", "effective_hamiltonian_bond_dimension",
@@ -238,6 +368,7 @@ function run_pilot(config)
                     record.purification_time_s, record.density_to_host_time_s,
                     record.mean_field_time_s, record.fields_to_device_time_s,
                     record.device_diagnostics_time_s,
+                    record.residuals_time_s, record.mixing_time_s,
                     record.measured_iteration_time_s,
                     record.purification_iterations, record.rho_bond_dimension,
                     record.hartree_bond_dimension, record.fock_bond_dimension,
@@ -262,20 +393,45 @@ function run_pilot(config)
             )
         end
     end
-    if config.backend == :cuda
-        synchronize_backend()
-        open(joinpath(output, "cuda_status.txt"), "w") do io
-            CUDA_BACKEND.versioninfo(io)
-            println(io)
-            CUDA_BACKEND.pool_status(io)
+    post_scf_started = time_ns()
+    cuda_status_time = if config.backend == :cuda
+        @elapsed begin
+            synchronize_backend()
+            open(joinpath(output, "cuda_status.txt"), "w") do io
+                CUDA_BACKEND.versioninfo(io)
+                println(io)
+                CUDA_BACKEND.pool_status(io)
+            end
         end
-        sys.H0 = to_host(sys.H0)
-        sys.VH = to_host(sys.VH)
-        sys.VF = to_host(sys.VF)
-        synchronize_backend()
+    else
+        0.0
     end
-    _write_history(joinpath(output, "scf_history.csv"), scf_diagnostics(sys))
-    _write_observables(joinpath(output, "observables.toml"), sys, converged, bounds)
+    fields_to_host_time = if config.backend == :cuda
+        @elapsed begin
+            sys.H0 = to_host(sys.H0)
+            sys.VH = to_host(sys.VH)
+            sys.VF = to_host(sys.VF)
+            synchronize_backend()
+        end
+    else
+        0.0
+    end
+    history_time = @elapsed(
+        _write_history(joinpath(output, "scf_history.csv"), scf_diagnostics(sys))
+    )
+    observable_timings = _write_observables(
+        joinpath(output, "observables.toml"), sys, converged, bounds;
+        mode=config.observables,
+    )
+    post_scf_total_time = (time_ns() - post_scf_started) / 1e9
+    _write_post_scf_timings(
+        joinpath(output, "post_scf_timings.toml"),
+        merge((
+            cuda_status_time_s=cuda_status_time,
+            fields_to_host_time_s=fields_to_host_time,
+            history_time_s=history_time,
+        ), observable_timings, (total_time_s=post_scf_total_time,)),
+    )
     println("SCF pilot completed: converged=$converged termination=$(scf_diagnostics(sys).termination_reason)")
     println("Output directory: $output")
     return converged
@@ -285,7 +441,7 @@ function main(arguments)
     config = parse_arguments(arguments)
     if isnothing(config)
         println("Usage: scf_pilot_2d.jl --output DIRECTORY [options]")
-        println("Options: --side-level 1..10 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda")
+        println("Options: --side-level 1..10 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda --observables compact|full")
         return
     end
     run_pilot(config)

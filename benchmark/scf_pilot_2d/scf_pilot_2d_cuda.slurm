@@ -74,6 +74,7 @@ MPO_CUDA_RUNTIME_VERSION="$cuda_runtime_version" \
   --padding 0.5 \
   --sp2-idempotency-tolerance 2e-4 \
   --sp2-relative-trace-tolerance 1e-6 \
+  --observables compact \
   --scf-mixing 0.5 \
   --scf-tol 0.1 \
   --scf-max-iterations 30

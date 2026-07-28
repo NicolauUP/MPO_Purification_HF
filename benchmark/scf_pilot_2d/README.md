@@ -14,6 +14,8 @@ Each completed run writes:
   purification, density transfer to the host, CPU mean-field extraction, field
   transfer to the device, and device-side diagnostics;
 - `observables.toml` — final particle number, checkerboard order, energy components, residuals, ranks, and five density/Hartree probes;
+- `post_scf_timings.toml` — separate timings for device status, final host
+  transfer, compact density summary, energy, residuals, and probes;
 - `process_time.txt` — wall time, CPU time, allocations reported by `/usr/bin/time`.
 
 Submit a uniform-seed pilot first:
@@ -56,6 +58,14 @@ In addition to the common outputs, a successful CUDA run writes
 `cuda_status.txt` with the selected runtime, device, and memory-pool state.
 The submission configures CUDA.jl from the CUDA toolkit loaded on the allocated
 compute node; it does not require internet access.
+
+The default `--observables compact` mode evaluates particle number and
+checkerboard order through MPO traces and evaluates the energy through
+\(\mathrm{Tr}(H_0\rho)\) and
+\(\tfrac12\mathrm{Tr}[(V_H[\rho]+V_F[\rho])\rho]\), with fresh fields extracted
+from the final density. It avoids a loop over every physical site and bond.
+Use `--observables full` only when explicit density extrema and the
+independently summed nearest-neighbour energy are required.
 
 ## Fixed-control size scaling
 
