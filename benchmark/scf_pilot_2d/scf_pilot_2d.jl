@@ -5,8 +5,8 @@
 This is intentionally a *single-run* diagnostic, not a parameter sweep. It
 writes sufficient numerical history and provenance to assess whether a chosen
 MPO cap, truncation tolerance, and initial seed support a trustworthy later
-campaign. To avoid accidental production-scale runs, `side_level` is capped at
-six (`side = 64`, `N = 4096`).
+campaign. To avoid accidental runs beyond the current scaling study,
+`side_level` is capped at ten (`side = 1024`, `N = 1_048_576`).
 """
 
 using Dates
@@ -73,7 +73,7 @@ function parse_arguments(arguments)
         throw(ArgumentError("unknown argument $argument; use --help"))
     end
     isnothing(config.output) && throw(ArgumentError("--output DIRECTORY is required"))
-    1 <= config.side_level <= 6 || throw(ArgumentError("side level must lie in 1:6 for this bounded SCF pilot"))
+    1 <= config.side_level <= 10 || throw(ArgumentError("side level must lie in 1:10 for this bounded SCF pilot"))
     config.potential in (:none, :checkerboard) || throw(ArgumentError("--potential must be none or checkerboard"))
     config.seed in (:uniform, :checkerboard_plus, :checkerboard_minus) || throw(ArgumentError("--seed must be uniform, checkerboard_plus, or checkerboard_minus"))
     config.backend in (:cpu, :cuda) || throw(ArgumentError("--backend must be cpu or cuda"))
@@ -285,7 +285,7 @@ function main(arguments)
     config = parse_arguments(arguments)
     if isnothing(config)
         println("Usage: scf_pilot_2d.jl --output DIRECTORY [options]")
-        println("Options: --side-level 1..6 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda")
+        println("Options: --side-level 1..10 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda")
         return
     end
     run_pilot(config)

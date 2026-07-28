@@ -56,3 +56,31 @@ In addition to the common outputs, a successful CUDA run writes
 `cuda_status.txt` with the selected runtime, device, and memory-pool state.
 The submission configures CUDA.jl from the CUDA toolkit loaded on the allocated
 compute node; it does not require internet access.
+
+## Fixed-control size scaling
+
+Four independent submissions extend the validated case without changing
+\(\chi_{\max}=256\), truncation tolerances, physical parameters, seed, or SCF
+controls:
+
+| Script | `L_side` | `L_total` | Lattice sites |
+|---|---:|---:|---:|
+| `scf_scaling_lside7_cuda.slurm` | 7 | 14 | 16,384 |
+| `scf_scaling_lside8_cuda.slurm` | 8 | 16 | 65,536 |
+| `scf_scaling_lside9_cuda.slurm` | 9 | 18 | 262,144 |
+| `scf_scaling_lside10_cuda.slurm` | 10 | 20 | 1,048,576 |
+
+Submit them as separate jobs:
+
+```bash
+export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
+for level in 7 8 9 10; do
+  sbatch --export=ALL,MPO_BENCHMARK_ROOT="$MPO_BENCHMARK_ROOT" \
+    "benchmark/scf_pilot_2d/scf_scaling_lside${level}_cuda.slurm"
+done
+```
+
+Each job writes to
+`$MPO_BENCHMARK_ROOT/scf_scaling_lsideLEVEL_cuda_JOBID`. Because the jobs are
+independent, a timeout or memory failure at a larger size does not discard the
+smaller-size measurements.
