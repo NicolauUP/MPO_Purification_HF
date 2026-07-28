@@ -93,6 +93,8 @@ end
     @test all(record -> record.mean_field_time_s >= 0, phase_records)
     @test all(record -> record.fields_to_device_time_s >= 0, phase_records)
     @test all(record -> record.device_diagnostics_time_s >= 0, phase_records)
+    @test all(record -> record.residuals_time_s >= 0, phase_records)
+    @test all(record -> record.mixing_time_s >= 0, phase_records)
     @test all(record -> record.measured_iteration_time_s >= 0, phase_records)
     @test all(record -> record.purification_iterations > 0, phase_records)
     @test opnorm(dense_matrix(scf_sys.ρ, scf_sys) - exact) < 2e-3

@@ -222,13 +222,18 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             (H, residual)
         end
         H_effective, commutator_residual = device_diagnostics
-        if iter > 1
-            vh_residual = _mpo_relative_change(vh_mpo, sys.VH, params)
-            vf_residual = _mpo_relative_change(vf_mpo, sys.VF, params)
-            rho_residual = _mpo_relative_change(sys.ρ, rho_previous, params)
+        residuals, residuals_time = timed_phase() do
+            vh_change = iter > 1 ?
+                _mpo_relative_change(vh_mpo, sys.VH, params) : Inf
+            vf_change = iter > 1 ?
+                _mpo_relative_change(vf_mpo, sys.VF, params) : Inf
+            rho_change = iter > 1 ?
+                _mpo_relative_change(sys.ρ, rho_previous, params) : Inf
+            two_cycle_change = iter >= 3 ?
+                _mpo_relative_change(sys.ρ, rho_two_steps_ago, params) : Inf
+            (vh_change, vf_change, rho_change, two_cycle_change)
         end
-        two_cycle_residual = iter >= 3 ?
-            _mpo_relative_change(sys.ρ, rho_two_steps_ago, params) : Inf
+        vh_residual, vf_residual, rho_residual, two_cycle_residual = residuals
         energy_total = record_energy ? _scf_energy_total(sys) : nothing
         push!(history, SCFIterationRecord(
             iter,
@@ -272,6 +277,37 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 overwrite=overwrite_progress,
             )
         end
+        current_record = history[end]
+        two_cycle_detected = detect_two_cycles &&
+            _scf_is_two_cycle(current_record, cycle_tolerance)
+        stable_history = !two_cycle_detected && _scf_has_stable_history(
+            history,
+            residual_tolerance;
+            required_iterations=stable_iterations,
+        )
+        mixing_time = 0.0
+        if !two_cycle_detected && !stable_history
+            _, mixing_time = timed_phase() do
+                if iter == 1
+                    sys.VH = vh_mpo
+                    sys.VF = vf_mpo
+                else
+                    sys.VH = +(
+                        sys.params.scf_mixing * vh_mpo,
+                        (1 - params.scf_mixing) * sys.VH;
+                        cutoff=sys.params.itensors_tol,
+                        maxdim=sys.params.itensors_maxdim,
+                    )
+                    sys.VF = +(
+                        sys.params.scf_mixing * vf_mpo,
+                        (1 - params.scf_mixing) * sys.VF;
+                        cutoff=sys.params.itensors_tol,
+                        maxdim=sys.params.itensors_maxdim,
+                    )
+                end
+            end
+            rho_two_steps_ago = rho_previous
+        end
         if !isnothing(phase_callback)
             phase_synchronize()
             phase_callback((
@@ -282,6 +318,8 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
                 mean_field_time_s=mean_field_time,
                 fields_to_device_time_s=fields_to_device_time,
                 device_diagnostics_time_s=device_diagnostics_time,
+                residuals_time_s=residuals_time,
+                mixing_time_s=mixing_time,
                 measured_iteration_time_s=(time_ns() - iteration_started) / 1e9,
                 purification_iterations=purification.iterations,
                 rho_bond_dimension=maxlinkdim(ρ_purified_device),
@@ -291,19 +329,14 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             ))
         end
 
-        current_record = history[end]
-        if detect_two_cycles && _scf_is_two_cycle(current_record, cycle_tolerance)
+        if two_cycle_detected
             termination_reason = :two_cycle_detected
             finish_iteration_progress(io, overwrote_scf_progress)
             verbose != :nothing && println(io, "SCF stopped: detected a two-cycle in the density matrix.")
             break
         end
 
-        if _scf_has_stable_history(
-            history,
-            residual_tolerance;
-            required_iterations=stable_iterations,
-        )
+        if stable_history
             converged = true
             termination_reason = :converged
             finish_iteration_progress(io, overwrote_scf_progress)
@@ -313,14 +346,6 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
             break
         end
 
-        if iter == 1
-            sys.VH = vh_mpo
-            sys.VF = vf_mpo
-        else
-            sys.VH = +(sys.params.scf_mixing * vh_mpo, (1 - params.scf_mixing) * sys.VH; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
-            sys.VF = +(sys.params.scf_mixing * vf_mpo, (1 - params.scf_mixing) * sys.VF; cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim)
-        end
-        rho_two_steps_ago = rho_previous
         # Optional external cleanup may reclaim device memory; host GC follows
         # the explicit policy above instead of being forced every iteration.
         cleanup()
