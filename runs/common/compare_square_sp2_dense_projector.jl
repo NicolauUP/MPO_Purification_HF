@@ -301,6 +301,7 @@ open(joinpath(output, "summary.toml"), "w") do io
         "sp2_converged" => result.converged,
         "sp2_termination_reason" => string(result.termination_reason),
         "sp2_iterations" => result.iterations,
+        "sp2_selected_iteration" => result.selected_iteration,
         "sp2_trace" => result.trace,
         "sp2_trace_error" => abs(result.trace - Ne),
         "sp2_idempotency_residual" => result.idempotency_residual,
