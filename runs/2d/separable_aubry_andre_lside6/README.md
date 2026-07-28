@@ -24,6 +24,10 @@ The three experiments answer different questions:
    exact diagonalization at `maxdim = 256, 512, 1024`.
 3. `submit_full_scf_cap_ladder_cuda.slurm` runs the full Hartree--Fock SCF
    calculation at the same three caps.
+4. `submit_fixed_sp2_truncation_cuda.slurm` keeps `maxdim=512`, uses the
+   exact-informed fixed-H interval `[-4.1, 4.1]`, and compares operational
+   cutoffs `1e-8` and `1e-10`. Nonconverged SP2 runs return their best measured
+   iterate rather than an unmeasured final polynomial update.
 
 Inspect experiments 1 and 2 before submitting experiment 3. In particular,
 the `maxdim=1024` SP2 work MPO may exceed one H100's available memory even
