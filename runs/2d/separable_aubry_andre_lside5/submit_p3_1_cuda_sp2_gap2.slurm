@@ -15,6 +15,7 @@
 
 set -euo pipefail
 module load julia/1.12.6
+module load nvidia-hpc-sdk/24.11
 
 REPOSITORY_ROOT="${SLURM_SUBMIT_DIR:?submit from MPO_Purification_HF}"
 export JULIA_DEPOT_PATH="${JULIA_DEPOT_PATH:-/gpfs/projects/epor78/cluster_depot}"
@@ -30,6 +31,24 @@ cd "$REPOSITORY_ROOT"
 echo "host=$(hostname)"
 echo "CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-unset}"
 nvidia-smi --query-gpu=name,memory.total,driver_version --format=csv,noheader
+
+cuda_runtime_version="$(
+  nvcc --version |
+    sed -n 's/.*release \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' |
+    tail -n 1
+)"
+test -n "$cuda_runtime_version" || {
+  echo "Could not determine the local CUDA toolkit version from nvcc." >&2
+  exit 1
+}
+echo "Configuring CUDA.jl to use local CUDA ${cuda_runtime_version}"
+
+MPO_CUDA_RUNTIME_VERSION="$cuda_runtime_version" \
+  julia --startup-file=no --project=. -e \
+  'using CUDA; CUDA.set_runtime_version!(
+      VersionNumber(ENV["MPO_CUDA_RUNTIME_VERSION"]);
+      local_toolkit=true,
+  )'
 
 /usr/bin/time -v julia --startup-file=no --project=. \
   runs/common/compare_square_sp2_dense_projector.jl \

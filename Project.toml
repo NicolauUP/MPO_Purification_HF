@@ -16,6 +16,7 @@ Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 TensorCrossInterpolation = "b261b2ec-6378-4871-b32e-9173bb050604"
 
 [extras]
+CUDA_Runtime_jll = "76a88914-d11a-5bdc-97e0-2f5a05c973a2"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 

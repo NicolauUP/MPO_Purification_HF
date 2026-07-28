@@ -226,6 +226,12 @@ the complete SP2 recurrence, including truncating factorizations, runs there.
 Only the final projector returns to the CPU for comparison with exact
 diagonalization.
 
+The submission loads MN5's NVIDIA HPC SDK, reads its CUDA version from
+`nvcc`, and provisions CUDA.jl's `local_toolkit` preference before starting a
+fresh Julia process. This is required because the transferred offline depot
+was prepared without an NVIDIA driver and therefore cannot select a CUDA
+runtime during precompilation.
+
 The result directory is
 `$MPO_RESULTS_ROOT/square_lside5_sp2_cuda_gap2/maxdim_256_tol_1e-10/`.
 Inspect `summary.toml`, `sp2_progress.txt`, and `cuda_status.txt`. Do not use

@@ -4,6 +4,7 @@ data/
 *.hdf5
 *.png
 notebooks/
+LocalPreferences.toml
 
 # Local/container dependency depots and exported images are transfer artefacts.
 cluster_depot/
