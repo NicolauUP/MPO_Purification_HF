@@ -40,9 +40,20 @@ end
     limited_result = @test_logs (:warn, r"SP2 purification did not converge") begin
         sp2_diagonal_result(values, 2; steps=1)
     end
-    _, _, limited = limited_result
+    limited_sys, limited_H, limited = limited_result
     @test !limited.converged
     @test limited.termination_reason == :max_iterations
+    @test limited.selected_iteration == 1
+    limited_bounds = exact_spectral_bounds(limited_H; padding=0.5)
+    limited_rho0 = construct_rho_0(
+        limited_sys, limited_sys.params, limited_bounds...;
+        method=:sp2,
+        verify_spectral_bounds=true,
+    )
+    @test opnorm(
+        dense_matrix(limited.rho, limited_sys) -
+        dense_matrix(limited_rho0, limited_sys),
+    ) < 1e-12
 
     # Same width, distinct positive Fermi gaps: both must select the exact rank-2 projector.
     # The 2e-3 gap needs 45 SP2 polynomials; it is finite, unlike the exactly

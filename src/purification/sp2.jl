@@ -61,6 +61,9 @@ function perform_purification_sp2(
     rho = rho0
     previous_idempotency = Inf
     stagnant_steps = 0
+    best_rho = nothing
+    best_score = Inf
+    best_iteration = 0
     max_bond_dimension = maxlinkdim(rho)
     bond_dimension_sum = 0
     bond_dimension_samples = 0
@@ -82,6 +85,16 @@ function perform_purification_sp2(
         trace_squared = real(tr(rho_squared))
         idem = idempotency_residual(rho, rho_squared)
         herm = _relative_mpo_residual(rho, ITensors.dag(rho), params)
+        convergence_score = max(
+            abs(trace_value - Ne) / convergence_trace_tolerance,
+            idem / idempotency_tolerance,
+            herm / hermiticity_tolerance,
+        )
+        if isfinite(convergence_score) && convergence_score < best_score
+            best_rho = rho
+            best_score = convergence_score
+            best_iteration = iteration
+        end
 
         if verbose > 0
             details = @sprintf(
@@ -110,6 +123,7 @@ function perform_purification_sp2(
                 iterations=iteration,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
+                selected_iteration=iteration,
                 work=work,
             )
         end
@@ -121,14 +135,17 @@ function perform_purification_sp2(
         end
         if stagnant_steps >= 8
             verbose > 0 && finish_iteration_progress(io, overwrite_progress)
+            selected_rho = isnothing(best_rho) ? rho : best_rho
+            selected_iteration = isnothing(best_rho) ? iteration : best_iteration
             return purification_result(
-                rho, params;
+                selected_rho, params;
                 method=:sp2,
                 converged=false,
                 termination_reason=:stagnation,
                 iterations=iteration,
                 spectral_bounds=spectral_bounds,
                 spectral_bounds_validation=spectral_bounds_validation,
+                selected_iteration=selected_iteration,
                 work=work,
             )
         end
@@ -145,15 +162,21 @@ function perform_purification_sp2(
     end
 
     verbose > 0 && finish_iteration_progress(io, overwrite_progress)
-    @warn "SP2 purification did not converge after $(params.purification_steps) steps."
+    selected_rho = isnothing(best_rho) ? rho0 : best_rho
+    selected_iteration = isnothing(best_rho) ? 1 : best_iteration
+    @warn(
+        "SP2 purification did not converge after $(params.purification_steps) " *
+        "steps; returning selected measured iteration $selected_iteration.",
+    )
     return purification_result(
-        rho, params;
+        selected_rho, params;
         method=:sp2,
         converged=false,
         termination_reason=:max_iterations,
         iterations=params.purification_steps,
         spectral_bounds=spectral_bounds,
         spectral_bounds_validation=spectral_bounds_validation,
+        selected_iteration=selected_iteration,
         work=PurificationWorkStats(
             params.purification_steps, 0, max_bond_dimension,
             bond_dimension_sum / max(1, bond_dimension_samples),
