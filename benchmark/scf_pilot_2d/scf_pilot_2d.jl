@@ -38,13 +38,16 @@ _optional(value) = isnothing(value) ? "" : string(value)
 function parse_arguments(arguments)
     config = (
         output=nothing, side_level=6, tx=-0.6, ty=-0.35, U=0.3,
+        hopping=:constant, hopping_modulation=0.0,
+        hopping_frequency=sqrt(2.0) - 5.0 / 6.0,
         density=0.5, potential=:checkerboard, potential_amplitude=0.6,
         seed=:uniform, seed_amplitude=0.05, tci_tol=1e-10,
         itensors_tol=1e-14, maxdim=256, steps=50, padding=0.5,
         scf_mixing=0.5, scf_tol=0.1, scf_max_iterations=30,
         backend=:cpu, sp2_idempotency_tolerance=1e-3,
         sp2_relative_trace_tolerance=1e-6, observables=:compact,
-        square_fock_method=:binary_carry,
+        square_fock_method=:binary_carry, spectral_lower=nothing,
+        spectral_upper=nothing,
     )
     index = 1
     while index <= length(arguments)
@@ -53,6 +56,9 @@ function parse_arguments(arguments)
         argument == "--side-level" && (config = merge(config, (side_level=parse(Int, arguments[index + 1]),)); index += 2; continue)
         argument == "--tx" && (config = merge(config, (tx=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--ty" && (config = merge(config, (ty=parse(Float64, arguments[index + 1]),)); index += 2; continue)
+        argument == "--hopping" && (config = merge(config, (hopping=Symbol(lowercase(arguments[index + 1])),)); index += 2; continue)
+        argument == "--hopping-modulation" && (config = merge(config, (hopping_modulation=parse(Float64, arguments[index + 1]),)); index += 2; continue)
+        argument == "--hopping-frequency" && (config = merge(config, (hopping_frequency=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--U" && (config = merge(config, (U=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--density" && (config = merge(config, (density=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--potential" && (config = merge(config, (potential=Symbol(arguments[index + 1]),)); index += 2; continue)
@@ -64,6 +70,8 @@ function parse_arguments(arguments)
         argument == "--maxdim" && (config = merge(config, (maxdim=parse(Int, arguments[index + 1]),)); index += 2; continue)
         argument == "--steps" && (config = merge(config, (steps=parse(Int, arguments[index + 1]),)); index += 2; continue)
         argument == "--padding" && (config = merge(config, (padding=parse(Float64, arguments[index + 1]),)); index += 2; continue)
+        argument == "--spectral-lower" && (config = merge(config, (spectral_lower=parse(Float64, arguments[index + 1]),)); index += 2; continue)
+        argument == "--spectral-upper" && (config = merge(config, (spectral_upper=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--scf-mixing" && (config = merge(config, (scf_mixing=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--scf-tol" && (config = merge(config, (scf_tol=parse(Float64, arguments[index + 1]),)); index += 2; continue)
         argument == "--scf-max-iterations" && (config = merge(config, (scf_max_iterations=parse(Int, arguments[index + 1]),)); index += 2; continue)
@@ -78,6 +86,9 @@ function parse_arguments(arguments)
     isnothing(config.output) && throw(ArgumentError("--output DIRECTORY is required"))
     1 <= config.side_level <= 10 || throw(ArgumentError("side level must lie in 1:10 for this bounded SCF pilot"))
     config.potential in (:none, :checkerboard) || throw(ArgumentError("--potential must be none or checkerboard"))
+    config.hopping in (:constant, :separable_aubry_andre) || throw(
+        ArgumentError("--hopping must be constant or separable_aubry_andre"),
+    )
     config.seed in (:uniform, :checkerboard_plus, :checkerboard_minus) || throw(ArgumentError("--seed must be uniform, checkerboard_plus, or checkerboard_minus"))
     config.backend in (:cpu, :cuda) || throw(ArgumentError("--backend must be cpu or cuda"))
     config.observables in (:compact, :full) ||
@@ -85,7 +96,14 @@ function parse_arguments(arguments)
     config.square_fock_method in (:tci, :binary_carry) || throw(ArgumentError(
         "--square-fock-method must be tci or binary_carry",
     ))
-    all(isfinite, (config.tx, config.ty, config.U, config.density, config.potential_amplitude, config.seed_amplitude, config.tci_tol, config.itensors_tol, config.padding, config.scf_mixing, config.scf_tol)) || throw(ArgumentError("all floating-point inputs must be finite"))
+    all(isfinite, (config.tx, config.ty, config.hopping_modulation,
+        config.hopping_frequency, config.U, config.density,
+        config.potential_amplitude, config.seed_amplitude, config.tci_tol,
+        config.itensors_tol, config.padding, config.scf_mixing,
+        config.scf_tol)) ||
+        throw(ArgumentError("all floating-point inputs must be finite"))
+    config.hopping_modulation >= 0 ||
+        throw(ArgumentError("hopping modulation must be nonnegative"))
     config.potential_amplitude >= 0 || throw(ArgumentError("potential amplitude must be nonnegative"))
     config.seed_amplitude >= 0 || throw(ArgumentError("seed amplitude must be nonnegative"))
     config.tci_tol > 0 && config.itensors_tol > 0 || throw(ArgumentError("TCI and ITensor tolerances must be positive"))
@@ -96,6 +114,15 @@ function parse_arguments(arguments)
         throw(ArgumentError("SP2 idempotency tolerance must be positive"))
     config.sp2_relative_trace_tolerance > 0 ||
         throw(ArgumentError("SP2 relative trace tolerance must be positive"))
+    xor(isnothing(config.spectral_lower), isnothing(config.spectral_upper)) &&
+        throw(ArgumentError(
+            "--spectral-lower and --spectral-upper must be supplied together",
+        ))
+    if !isnothing(config.spectral_lower)
+        config.spectral_lower < config.spectral_upper || throw(ArgumentError(
+            "spectral lower bound must be smaller than the upper bound",
+        ))
+    end
     return config
 end
 
@@ -112,8 +139,20 @@ function _parameters(config)
     else
         _checkerboard(config.seed_amplitude, -1.0)
     end
+    hopping = if config.hopping == :constant
+        (config.tx, config.ty)
+    else
+        modulation = config.hopping_modulation
+        frequency = config.hopping_frequency
+        (
+            (x, y) -> -1.0 - modulation *
+                cos(2π * frequency * (Float64(x) + 0.5)),
+            (x, y) -> -1.0 - modulation *
+                cos(2π * frequency * (Float64(y) + 0.5)),
+        )
+    end
     return ParametersSquare(
-        L=2config.side_level, t=(config.tx, config.ty), U=config.U,
+        L=2config.side_level, t=hopping, U=config.U,
         W=potential, S=seed, tci_tol=config.tci_tol,
         itensors_tol=config.itensors_tol, itensors_maxdim=config.maxdim,
         density=config.density, purification_steps=config.steps,
@@ -132,9 +171,12 @@ function _write_metadata(path, config, params, bounds)
         println(io, "L_total = $(params.L)")
         println(io, "N = $(2^params.L)")
         println(io, "target_particles = $(round(Int, config.density * 2^params.L))")
-        for name in (:tx, :ty, :U, :density, :potential_amplitude, :seed_amplitude, :tci_tol, :itensors_tol, :padding, :scf_mixing, :scf_tol)
+        for name in (:tx, :ty, :hopping_modulation, :hopping_frequency,
+                     :U, :density, :potential_amplitude, :seed_amplitude,
+                     :tci_tol, :itensors_tol, :padding, :scf_mixing, :scf_tol)
             println(io, "$(name) = $(getfield(config, name))")
         end
+        println(io, "hopping = ", _toml_string(config.hopping))
         println(io, "potential = ", _toml_string(config.potential))
         println(io, "seed = ", _toml_string(config.seed))
         println(io, "itensors_maxdim = $(config.maxdim)")
@@ -143,6 +185,9 @@ function _write_metadata(path, config, params, bounds)
         println(io, "backend = ", _toml_string(config.backend))
         println(io, "sp2_idempotency_tolerance = $(config.sp2_idempotency_tolerance)")
         println(io, "sp2_relative_trace_tolerance = $(config.sp2_relative_trace_tolerance)")
+        println(io, "spectral_bounds_source = ", _toml_string(
+            isnothing(config.spectral_lower) ? "derived_conservative" : "supplied",
+        ))
         println(io, "observables = ", _toml_string(config.observables))
         println(io, "square_fock_method = ", _toml_string(config.square_fock_method))
         println(io, "spectral_lower = $(bounds[1])")
@@ -203,8 +248,10 @@ function _full_density_summary(sys)
     density_sum = 0.0
     density_min, density_max = Inf, -Inf
     checkerboard_sum = 0.0
+    site_density = Vector{Float64}(undef, N)
     for site in 1:N
         value = real(MatrixChecker(sys.ρ, sys.sites, site, site, sys.bra_states, sys.ket_states))
+        site_density[site] = value
         x, y = MPO_MeanField.square_lattice_decoder(site - 1, params.L)
         density_sum += value
         density_min = min(density_min, value)
@@ -216,6 +263,7 @@ function _full_density_summary(sys)
         checkerboard_order=checkerboard_sum / N,
         density_min=density_min,
         density_max=density_max,
+        site_density=site_density,
     )
 end
 
@@ -295,6 +343,15 @@ function _write_observables(path, sys, converged, bounds; mode=:compact)
     stationarity = stationarity_timing.value
     probes_timing = @timed _measure_probes(sys, side, params.L)
     probes = probes_timing.value
+    if mode == :full
+        open(joinpath(dirname(path), "site_density.csv"), "w") do io
+            _row(io, ("site", "x", "y", "density"))
+            for site in 1:N
+                x, y = MPO_MeanField.square_lattice_decoder(site - 1, params.L)
+                _row(io, (site, x, y, density.site_density[site]))
+            end
+        end
+    end
     open(path, "w") do io
         println(io, "observable_mode = ", _toml_string(mode))
         println(io, "energy_evaluation = ", _toml_string(
@@ -343,7 +400,19 @@ function run_pilot(config)
     mkpath(output)
     params = _parameters(config)
     potential_bounds = config.potential == :none ? (0.0, 0.0) : (-config.potential_amplitude, config.potential_amplitude)
-    bounds = square_scf_spectral_bounds(params; potential_bounds=potential_bounds, margin=config.padding)
+    hopping_abs_bounds = config.hopping == :separable_aubry_andre ?
+        (1.0 + config.hopping_modulation, 1.0 + config.hopping_modulation) :
+        nothing
+    bounds = if isnothing(config.spectral_lower)
+        square_scf_spectral_bounds(
+            params;
+            potential_bounds=potential_bounds,
+            hopping_abs_bounds=hopping_abs_bounds,
+            margin=config.padding,
+        )
+    else
+        validate_spectral_bounds(config.spectral_lower, config.spectral_upper)
+    end
     _write_metadata(joinpath(output, "metadata.toml"), config, params, bounds)
     if config.backend == :cuda
         isnothing(CUDA_BACKEND) &&
@@ -451,7 +520,7 @@ function main(arguments)
     config = parse_arguments(arguments)
     if isnothing(config)
         println("Usage: scf_pilot_2d.jl --output DIRECTORY [options]")
-        println("Options: --side-level 1..10 --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --backend cpu|cuda --observables compact|full --square-fock-method tci|binary_carry")
+        println("Options: --side-level 1..10 --hopping constant|separable_aubry_andre --hopping-modulation V2 --hopping-frequency TAU --potential none|checkerboard --seed uniform|checkerboard_plus|checkerboard_minus --spectral-lower EMIN --spectral-upper EMAX --backend cpu|cuda --observables compact|full --square-fock-method tci|binary_carry")
         return
     end
     run_pilot(config)
