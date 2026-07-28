@@ -109,6 +109,95 @@ function direct_hartree_probe_error(field::MPO, sys::System)
     return maximum(errors), sum(errors) / length(errors)
 end
 
+function direct_fock_probe_rows(
+    sys::System,
+    horizontal_tci::MPO,
+    vertical_tci::MPO,
+    horizontal_carry::MPO,
+    vertical_carry::MPO,
+)
+    side = 2^div(sys.params.L, 2)
+    middle = div(side, 2)
+    rows = NamedTuple[]
+    valid_starts = unique((
+        (0, 0),
+        (side - 2, 0),
+        (0, side - 1),
+        (side - 2, side - 1),
+        (min(middle, side - 2), middle),
+    ))
+    for orientation in (:horizontal, :vertical)
+        tci = orientation == :horizontal ? horizontal_tci : vertical_tci
+        carry = orientation == :horizontal ? horizontal_carry : vertical_carry
+        for (x, y) in valid_starts
+            source_x, source_y = orientation == :horizontal ? (x, y) : (y, x)
+            source = square_lattice_index(source_x, source_y, sys.params.L)
+            neighbour = orientation == :horizontal ?
+                square_lattice_index(source_x + 1, source_y, sys.params.L) :
+                square_lattice_index(source_x, source_y + 1, sys.params.L)
+            expected = -sys.params.U * real(MatrixChecker(
+                sys.ρ, sys.sites, source, neighbour,
+                sys.bra_states, sys.ket_states,
+            ))
+            tci_value = real(MatrixChecker(
+                tci, sys.sites, source, neighbour,
+                sys.bra_states, sys.ket_states,
+            ))
+            carry_value = real(MatrixChecker(
+                carry, sys.sites, source, neighbour,
+                sys.bra_states, sys.ket_states,
+            ))
+            push!(rows, (
+                orientation=orientation,
+                probe="valid",
+                source_x=source_x,
+                source_y=source_y,
+                neighbour_x=orientation == :horizontal ? source_x + 1 : source_x,
+                neighbour_y=orientation == :horizontal ? source_y : source_y + 1,
+                expected=expected,
+                tci=tci_value,
+                carry=carry_value,
+                tci_error=abs(tci_value - expected),
+                carry_error=abs(carry_value - expected),
+            ))
+        end
+
+        # A carry leaving the coordinate's most-significant bit must be
+        # discarded. Probe the corresponding wrapped coordinate explicitly:
+        # it is not an open-boundary nearest-neighbour bond.
+        for transverse in unique((0, side - 1, middle))
+            source_x, source_y = orientation == :horizontal ?
+                (side - 1, transverse) : (transverse, side - 1)
+            neighbour_x, neighbour_y = orientation == :horizontal ?
+                (0, transverse) : (transverse, 0)
+            source = square_lattice_index(source_x, source_y, sys.params.L)
+            neighbour = square_lattice_index(neighbour_x, neighbour_y, sys.params.L)
+            tci_value = real(MatrixChecker(
+                tci, sys.sites, source, neighbour,
+                sys.bra_states, sys.ket_states,
+            ))
+            carry_value = real(MatrixChecker(
+                carry, sys.sites, source, neighbour,
+                sys.bra_states, sys.ket_states,
+            ))
+            push!(rows, (
+                orientation=orientation,
+                probe="open_boundary",
+                source_x=source_x,
+                source_y=source_y,
+                neighbour_x=neighbour_x,
+                neighbour_y=neighbour_y,
+                expected=0.0,
+                tci=tci_value,
+                carry=carry_value,
+                tci_error=abs(tci_value),
+                carry_error=abs(carry_value),
+            ))
+        end
+    end
+    return rows
+end
+
 function truncated_adjacency_hartree(sys::System; cutoff::Float64, maxdim::Int)
     density_tensors = MPO_MeanField._density_diagonal_qtt_tensors(sys.ρ, sys.sites)
     density = MPS(density_tensors)

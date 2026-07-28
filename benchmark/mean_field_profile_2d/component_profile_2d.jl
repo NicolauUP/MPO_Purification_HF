@@ -99,6 +99,13 @@ function run_profile(config)
         cutoff=config.cutoff,
         maxdim=config.maxdim,
     ))
+    direct_fock_rows = direct_fock_probe_rows(
+        sys,
+        horizontal.field,
+        vertical.field,
+        horizontal_carry.field,
+        vertical_carry.field,
+    )
 
     open(joinpath(output, "components.csv"), "w") do io
         row(io, (
@@ -130,6 +137,21 @@ function run_profile(config)
                 label, measurement.time_s, measurement.bytes,
                 measurement.gc_time_s, measurement.max_chi,
                 measurement.mean_chi, error,
+            ))
+        end
+    end
+
+    open(joinpath(output, "fock_direct_validation.csv"), "w") do io
+        row(io, (
+            "orientation", "probe", "source_x", "source_y",
+            "neighbour_x", "neighbour_y", "expected", "tci", "binary_carry",
+            "tci_abs_error", "binary_carry_abs_error",
+        ))
+        for probe in direct_fock_rows
+            row(io, (
+                probe.orientation, probe.probe, probe.source_x, probe.source_y,
+                probe.neighbour_x, probe.neighbour_y, probe.expected,
+                probe.tci, probe.carry, probe.tci_error, probe.carry_error,
             ))
         end
     end

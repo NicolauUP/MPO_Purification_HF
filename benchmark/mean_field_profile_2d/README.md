@@ -6,7 +6,9 @@ and then measure mean-field extraction on CPU. They do not run SCF.
 `component_profile_2d.jl` times the current untruncated adjacency Hartree path,
 horizontal and vertical TCI Fock paths, their assembly, and the existing
 binary-carry Fock prototypes. The binary-carry rows report their relative MPO
-error against the current TCI convention.
+error against the current TCI convention. `fock_direct_validation.csv`
+independently compares both extractors with direct density-matrix
+measurements on interior, boundary-adjacent, and forbidden wraparound bonds.
 
 `hartree_truncation_sweep_2d.jl` compares the current untruncated
 `U*A_nn*n` application with truncation applied during that operation. It
