@@ -54,7 +54,7 @@ function run_scf!(sys::System, H_min::Float64, H_max::Float64;
     verify_spectral_bounds::Bool=false,
     spectral_safety_margin::Float64=0.0,
     purification_method::Symbol=:sp2,
-    square_fock_method::Symbol=:tci,
+    square_fock_method::Symbol=:binary_carry,
     sp2_idempotency_tolerance::Real=1e-3,
     sp2_trace_tolerance::Union{Nothing,Real}=nothing,
     chemical_potential::Union{Nothing,Real}=nothing,

@@ -28,8 +28,8 @@ to be checked for every calculation.
   - `:mcweeny_mu` — direct fixed-chemical-potential McWeeny purification.
 - Observable and diagnostic reporting: density, bond order, particle number,
   energy components, Hermiticity, idempotency, and stationarity.
-- Tensor-cross-interpolation (TCI) field extraction, plus experimental 1D
-  binary-carry extractors for Hartree and Fock fields.
+- Binary-carry square Hartree/Fock extraction, with TCI square Fock and
+  experimental 1D alternatives retained for validation and comparison.
 
 ## Model and conventions
 

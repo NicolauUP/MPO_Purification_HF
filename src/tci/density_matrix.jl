@@ -564,11 +564,11 @@ end
 """
     extract_fock_mpo_binary_carry_square_horizontal(sys)
 
-Experimental square horizontal Fock extractor. It obtains the right-directed
+Square horizontal Fock extractor. It obtains the right-directed
 band `rho[(x,y),(x+1,y)]` by a local interleaved binary carry, applies the
 current `-U * real(rho[i,j])` convention, and assembles the established
-Hermitian horizontal field. The cached-TCI extractor remains the SCF default
-until representative benchmarks establish a benefit.
+Hermitian horizontal field. This is the default square SCF path; the cached
+TCI extractor remains available through `square_fock_method=:tci`.
 """
 function extract_fock_mpo_binary_carry_square_horizontal(sys::System)
     sys.params isa ParametersSquare || throw(ArgumentError(
@@ -597,10 +597,10 @@ end
 """
     extract_fock_mpo_binary_carry_square_vertical(sys)
 
-Experimental square vertical counterpart of
+Square vertical counterpart of
 [`extract_fock_mpo_binary_carry_square_horizontal`](@ref). It samples only
 the up-directed band `rho[(x,y),(x,y+1)]` and applies the same real-exchange
-and open-boundary conventions. It is opt-in and is not used by SCF yet.
+and open-boundary conventions.
 """
 function extract_fock_mpo_binary_carry_square_vertical(sys::System)
     sys.params isa ParametersSquare || throw(ArgumentError(
@@ -894,7 +894,7 @@ function extract_fock_mpo_square_vertical(sys::System)
 end
 
 """
-    extract_mean_fields(sys; square_fock_method=:tci)
+    extract_mean_fields(sys; square_fock_method=:binary_carry)
 
 Return `(VH, VF)` using the geometry-specific nearest-neighbour Hartree/Fock
 implementation for `sys`. Square `VF` is the sum of independently constructed
@@ -903,7 +903,7 @@ or `:binary_carry`; it has no effect for one-dimensional systems.
 """
 function _extract_mean_fields_with_components(
     sys::System;
-    square_fock_method::Symbol=:tci,
+    square_fock_method::Symbol=:binary_carry,
 )
     square_fock_method in (:tci, :binary_carry) || throw(ArgumentError(
         "square_fock_method must be :tci or :binary_carry, got $square_fock_method",
@@ -927,7 +927,7 @@ function _extract_mean_fields_with_components(
     throw(ArgumentError("no mean-field extractor for $(typeof(sys.params))"))
 end
 
-function extract_mean_fields(sys::System; square_fock_method::Symbol=:tci)
+function extract_mean_fields(sys::System; square_fock_method::Symbol=:binary_carry)
     hartree, fock, _ = _extract_mean_fields_with_components(
         sys; square_fock_method=square_fock_method,
     )
