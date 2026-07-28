@@ -10,6 +10,9 @@ Each completed run writes:
 - `metadata.toml` — full physical and numerical input, conservative spectral bounds, and project fingerprint;
 - `progress.txt` — purification and SCF progress without terminal control codes;
 - `scf_history.csv` — one row per SCF iteration, including residuals, energy, and MPO bond dimensions;
+- `phase_timings.csv` — synchronized per-iteration timings for initialization,
+  purification, density transfer to the host, CPU mean-field extraction, field
+  transfer to the device, and device-side diagnostics;
 - `observables.toml` — final particle number, checkerboard order, energy components, residuals, ranks, and five density/Hartree probes;
 - `process_time.txt` — wall time, CPU time, allocations reported by `/usr/bin/time`.
 
@@ -33,3 +36,23 @@ seed dependence as a physical broken-symmetry state.
 keeping Julia single-threaded. This is memory headroom, not parallel speedup.
 For a larger MPO cap, override it at submission, for example
 `sbatch --cpus-per-task=32 ...` for roughly 64 GiB.
+
+## H100 pilot
+
+The CUDA pilot keeps SP2 purification and the effective-Hamiltonian diagnostics
+on the GPU. Density matrices are transferred to the CPU for the current
+Hartree/Fock extraction kernels, and the resulting fields are transferred back
+to the GPU. The phase log measures this hybrid workflow directly.
+
+Submit the calibrated `L_side=6` case with:
+
+```bash
+export MPO_BENCHMARK_ROOT=/gpfs/projects/epor78/MPO_HF_benchmarks
+sbatch --export=ALL,MPO_BENCHMARK_ROOT="$MPO_BENCHMARK_ROOT" \
+  benchmark/scf_pilot_2d/scf_pilot_2d_cuda.slurm
+```
+
+In addition to the common outputs, a successful CUDA run writes
+`cuda_status.txt` with the selected runtime, device, and memory-pool state.
+The submission configures CUDA.jl from the CUDA toolkit loaded on the allocated
+compute node; it does not require internet access.
