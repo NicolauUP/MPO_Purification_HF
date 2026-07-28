@@ -209,6 +209,29 @@ The run uses `maxdim=256`, `itensors_tol=1e-14`, 50 SP2 steps, half filling,
 and the safe fixed-Hamiltonian interval `[-4.75,4.75]`. It performs no SCF
 and writes to `$MPO_RESULTS_ROOT/square_lside5_sp2_gap4/maxdim_256/`.
 
+## P3.1: first CUDA SP2 calibration
+
+Before moving a full SCF iteration to the GPU, repeat the validated fixed
+gap-2 Hamiltonian on one accelerator:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p3_1_cuda_sp2_gap2.slurm
+```
+
+This uses the operational calibration (`maxdim=256`,
+`itensors_tol=1e-10`, SP2 idempotency tolerance `2e-4`, and relative trace
+tolerance `1e-6`). The Hamiltonian and density MPO are transferred to CUDA;
+the complete SP2 recurrence, including truncating factorizations, runs there.
+Only the final projector returns to the CPU for comparison with exact
+diagonalization.
+
+The result directory is
+`$MPO_RESULTS_ROOT/square_lside5_sp2_cuda_gap2/maxdim_256_tol_1e-10/`.
+Inspect `summary.toml`, `sp2_progress.txt`, and `cuda_status.txt`. Do not use
+the CUDA path for SCF until convergence, density and bond errors, energy
+error, and iteration count agree with the established CPU calibration.
+
 ## P1.12: SP2 gaps 1 and 2 with cap control
 
 Run gaps `1` and `2` at both `maxdim=256` and `384`:

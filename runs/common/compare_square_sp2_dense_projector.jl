@@ -16,14 +16,17 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) in (4, 5) || error(
-    "usage: compare_square_sp2_dense_projector.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY [SP2_IDEMPOTENCY_TOLERANCE]",
+length(ARGS) in 4:8 || error(
+    "usage: compare_square_sp2_dense_projector.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY [SP2_IDEMPOTENCY_TOLERANCE [BACKEND [ITENSORS_TOL [SP2_RELATIVE_TRACE_TOLERANCE]]]]",
 )
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
 maxdim = tryparse(Int, ARGS[3])
 output = abspath(ARGS[4])
-sp2_idempotency_tolerance = length(ARGS) == 5 ? tryparse(Float64, ARGS[5]) : 1e-3
+sp2_idempotency_tolerance = length(ARGS) >= 5 ? tryparse(Float64, ARGS[5]) : 1e-3
+backend = length(ARGS) >= 6 ? Symbol(lowercase(ARGS[6])) : :cpu
+itensors_tol_override = length(ARGS) >= 7 ? tryparse(Float64, ARGS[7]) : nothing
+sp2_relative_trace_tolerance = length(ARGS) == 8 ? tryparse(Float64, ARGS[8]) : nothing
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
 isnothing(sp2_idempotency_tolerance) &&
@@ -31,6 +34,18 @@ isnothing(sp2_idempotency_tolerance) &&
 maxdim > 0 || error("MAXDIM must be positive")
 isfinite(sp2_idempotency_tolerance) && sp2_idempotency_tolerance > 0 ||
     error("SP2_IDEMPOTENCY_TOLERANCE must be finite and positive")
+backend in (:cpu, :cuda) || error("BACKEND must be cpu or cuda")
+if length(ARGS) >= 7
+    isnothing(itensors_tol_override) && error("ITENSORS_TOL must be a number")
+    isfinite(itensors_tol_override) && itensors_tol_override > 0 ||
+        error("ITENSORS_TOL must be finite and positive")
+end
+if length(ARGS) == 8
+    isnothing(sp2_relative_trace_tolerance) &&
+        error("SP2_RELATIVE_TRACE_TOLERANCE must be a number")
+    isfinite(sp2_relative_trace_tolerance) && sp2_relative_trace_tolerance > 0 ||
+        error("SP2_RELATIVE_TRACE_TOLERANCE must be finite and positive")
+end
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
 include(campaign_file)
 @isdefined(campaign) || error("campaign file must define `campaign`")
@@ -44,10 +59,38 @@ write_csv_row(io, values) = println(io, join(csv_escape.(values), ','))
 git_revision(root) = try readchomp(`git -C $root rev-parse HEAD`) catch; "unavailable" end
 rms(values) = sqrt(sum(abs2, values) / length(values))
 
-function with_maxdim(params::ParametersSquare, maxdim::Int)
+if backend == :cuda
+    @eval using CUDA
+    CUDA.functional() || error("CUDA is not functional on this node")
+end
+
+to_device = backend == :cuda ? CUDA.cu : identity
+to_host = backend == :cuda ? ITensors.cpu : identity
+synchronize_backend() = backend == :cuda ? CUDA.synchronize() : nothing
+device_name = backend == :cuda ? CUDA.name(CUDA.device()) : "CPU"
+device_total_memory = backend == :cuda ? CUDA.total_memory() : 0
+device_free_memory_before = backend == :cuda ? CUDA.free_memory() : 0
+
+function backend_timed(f)
+    synchronize_backend()
+    measurement = @timed begin
+        value = f()
+        synchronize_backend()
+        value
+    end
+    return measurement
+end
+
+function with_numerical_controls(
+    params::ParametersSquare,
+    maxdim::Int,
+    itensors_tol_override::Union{Nothing,Float64},
+)
     return ParametersSquare(
         L=params.L, t=params.t, U=params.U, W=params.W, S=params.S,
-        tci_tol=params.tci_tol, itensors_tol=params.itensors_tol,
+        tci_tol=params.tci_tol,
+        itensors_tol=isnothing(itensors_tol_override) ?
+            params.itensors_tol : itensors_tol_override,
         itensors_maxdim=maxdim, density=params.density,
         purification_steps=params.purification_steps,
         scf_mixing=params.scf_mixing, scf_tol=params.scf_tol,
@@ -113,7 +156,7 @@ function checkerboard_order(density, L)
     return total / length(density)
 end
 
-params = with_maxdim(spec.params, maxdim)
+params = with_numerical_controls(spec.params, maxdim, itensors_tol_override)
 bounds = validate_spectral_bounds(spec.spectral_bounds...)
 N = 2^params.L
 Ne = round(Int, params.density * N)
@@ -138,34 +181,58 @@ exact_bond_order = ComplexF64[
 ]
 
 sys = System(params)
-H_mpo = +(sys.H0, sys.VH, sys.VF;
+H_mpo_cpu = +(sys.H0, sys.VH, sys.VF;
     cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
 )
-rho0 = construct_rho_0(
-    sys, params, bounds...;
-    method=:sp2,
-    verify_spectral_bounds=false,
-)
-purification = @timed open(joinpath(output, "sp2_progress.txt"), "w") do progress
-    perform_purification(
-        rho0, params;
+transfer_to_device = backend_timed() do
+    sys.H0 = to_device(sys.H0)
+    sys.VH = to_device(sys.VH)
+    sys.VF = to_device(sys.VF)
+end
+rho0_calculation = backend_timed() do
+    construct_rho_0(
+        sys, params, bounds...;
         method=:sp2,
-        verbose=1,
-        io=progress,
-        overwrite_progress=false,
-        sp2_idempotency_tolerance=sp2_idempotency_tolerance,
-        spectral_bounds=bounds,
-        spectral_bounds_validation=:supplied_analytical,
+        verify_spectral_bounds=false,
+        to_gpu=to_device,
     )
+end
+rho0 = rho0_calculation.value
+purification = backend_timed() do
+    open(joinpath(output, "sp2_progress.txt"), "w") do progress
+        perform_purification(
+            rho0, params;
+            method=:sp2,
+            verbose=1,
+            io=progress,
+            overwrite_progress=false,
+            sp2_idempotency_tolerance=sp2_idempotency_tolerance,
+            sp2_trace_tolerance=isnothing(sp2_relative_trace_tolerance) ?
+                nothing : Ne * sp2_relative_trace_tolerance,
+            spectral_bounds=bounds,
+            spectral_bounds_validation=:supplied_analytical,
+        )
+    end
 end
 result = purification.value
 
-measurement = @timed measure_local_projector(result.rho, sys, bonds)
+transfer_to_host = backend_timed(() -> to_host(result.rho))
+rho_host = transfer_to_host.value
+measurement = @timed measure_local_projector(rho_host, sys, bonds)
 sp2_density = measurement.value.density
 sp2_bond_order = measurement.value.bond_order
 stationarity = @timed MPO_MeanField._scf_commutator_residual(
-    H_mpo, result.rho, params,
+    H_mpo_cpu, rho_host, params,
 )
+device_free_memory_after = backend == :cuda ? CUDA.free_memory() : 0
+
+if backend == :cuda
+    open(joinpath(output, "cuda_status.txt"), "w") do io
+        CUDA.versioninfo(io)
+        println(io)
+        CUDA.pool_status(io)
+    end
+end
 
 density_error = sp2_density - exact_density
 bond_error = sp2_bond_order - exact_bond_order
@@ -216,7 +283,14 @@ open(joinpath(output, "summary.toml"), "w") do io
         "target_particles" => Ne,
         "itensors_tol" => params.itensors_tol,
         "itensors_maxdim" => params.itensors_maxdim,
+        "backend" => string(backend),
+        "device_name" => device_name,
+        "device_total_memory_bytes" => device_total_memory,
+        "device_free_memory_before_bytes" => device_free_memory_before,
+        "device_free_memory_after_bytes" => device_free_memory_after,
         "sp2_idempotency_tolerance" => sp2_idempotency_tolerance,
+        "sp2_relative_trace_tolerance" => isnothing(sp2_relative_trace_tolerance) ?
+            "default" : sp2_relative_trace_tolerance,
         "spectral_lower" => bounds[1],
         "spectral_upper" => bounds[2],
         "exact_lambda_min" => first(eigenpairs.values),
@@ -256,6 +330,10 @@ open(joinpath(output, "summary.toml"), "w") do io
         "dense_diagonalization_allocations_bytes" => dense_calculation.bytes,
         "purification_time_s" => purification.time,
         "purification_allocations_bytes" => purification.bytes,
+        "initialization_time_s" => rho0_calculation.time,
+        "initialization_allocations_bytes" => rho0_calculation.bytes,
+        "transfer_to_device_time_s" => transfer_to_device.time,
+        "transfer_to_host_time_s" => transfer_to_host.time,
         "local_measurement_time_s" => measurement.time,
         "local_measurement_allocations_bytes" => measurement.bytes,
         "stationarity_time_s" => stationarity.time,
@@ -277,7 +355,8 @@ open(joinpath(output, "metadata.toml"), "w") do io
 end
 
 println(
-    "Fixed square SP2/dense comparison: label=$(spec.label) maxdim=$maxdim " *
+    "Fixed square SP2/dense comparison: label=$(spec.label) backend=$backend " *
+    "device=$(device_name) maxdim=$maxdim " *
     "idempotency_tolerance=$sp2_idempotency_tolerance",
 )
 println("SP2 converged=$(result.converged) iterations=$(result.iterations)")
