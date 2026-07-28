@@ -16,8 +16,8 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) in (6, 7) || error(
-    "usage: compare_square_projector_compression.jl CAMPAIGN_FILE TASK_INDEX MODE MAXDIM OUTPUT_DIRECTORY CUTOFFS [ITENSORS_TOL]",
+length(ARGS) in (6, 7, 9) || error(
+    "usage: compare_square_projector_compression.jl CAMPAIGN_FILE TASK_INDEX MODE MAXDIM OUTPUT_DIRECTORY CUTOFFS [ITENSORS_TOL [SP2_IDEMPOTENCY_TOLERANCE SP2_RELATIVE_TRACE_TOLERANCE]]",
 )
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
@@ -30,6 +30,11 @@ catch
     error("CUTOFFS must be a comma-separated list of numbers")
 end
 itensors_tol_override = length(ARGS) == 7 ? tryparse(Float64, ARGS[7]) : nothing
+if length(ARGS) == 9
+    itensors_tol_override = tryparse(Float64, ARGS[7])
+end
+sp2_idempotency_tolerance = length(ARGS) == 9 ? tryparse(Float64, ARGS[8]) : 1e-3
+sp2_relative_trace_tolerance = length(ARGS) == 9 ? tryparse(Float64, ARGS[9]) : nothing
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
 mode in (:exact, :sp2) || error("MODE must be `exact` or `sp2`")
@@ -37,10 +42,20 @@ maxdim > 0 || error("MAXDIM must be positive")
 !isempty(cutoffs) || error("at least one cutoff is required")
 all(cutoff -> isfinite(cutoff) && cutoff >= 0, cutoffs) ||
     error("all cutoffs must be finite and nonnegative")
-if length(ARGS) == 7
+if length(ARGS) >= 7
     isnothing(itensors_tol_override) && error("ITENSORS_TOL must be a number")
     isfinite(itensors_tol_override) && itensors_tol_override > 0 ||
         error("ITENSORS_TOL must be finite and positive")
+end
+isnothing(sp2_idempotency_tolerance) &&
+    error("SP2_IDEMPOTENCY_TOLERANCE must be a number")
+isfinite(sp2_idempotency_tolerance) && sp2_idempotency_tolerance > 0 ||
+    error("SP2_IDEMPOTENCY_TOLERANCE must be finite and positive")
+if length(ARGS) == 9
+    isnothing(sp2_relative_trace_tolerance) &&
+        error("SP2_RELATIVE_TRACE_TOLERANCE must be a number")
+    isfinite(sp2_relative_trace_tolerance) && sp2_relative_trace_tolerance > 0 ||
+        error("SP2_RELATIVE_TRACE_TOLERANCE must be finite and positive")
 end
 length(unique(cutoffs)) == length(cutoffs) || error("cutoffs must be unique")
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
@@ -208,6 +223,8 @@ params = with_numerics(spec.params, maxdim, operational_itensors_tol)
 bounds = validate_spectral_bounds(spec.spectral_bounds...)
 N = 2^params.L
 Ne = round(Int, params.density * N)
+sp2_absolute_trace_tolerance = isnothing(sp2_relative_trace_tolerance) ?
+    nothing : sp2_relative_trace_tolerance * Ne
 bonds = collect(square_undirected_bonds(params.L))
 repo_root = abspath(joinpath(@__DIR__, "..", ".."))
 started_at = now(UTC)
@@ -241,6 +258,8 @@ if mode == :sp2
             verbose=1,
             io=progress,
             overwrite_progress=false,
+            sp2_idempotency_tolerance=sp2_idempotency_tolerance,
+            sp2_trace_tolerance=sp2_absolute_trace_tolerance,
             spectral_bounds=bounds,
             spectral_bounds_validation=:supplied_analytical,
         )
@@ -368,6 +387,15 @@ metadata = Dict(
     "cutoffs" => cutoffs,
     "campaign_itensors_tol" => spec.params.itensors_tol,
     "itensors_tol" => params.itensors_tol,
+    "sp2_idempotency_tolerance" => sp2_idempotency_tolerance,
+    "sp2_relative_trace_tolerance" => (
+        isnothing(sp2_relative_trace_tolerance) ?
+        "automatic" : sp2_relative_trace_tolerance
+    ),
+    "sp2_absolute_trace_tolerance" => (
+        isnothing(sp2_absolute_trace_tolerance) ?
+        "automatic" : sp2_absolute_trace_tolerance
+    ),
     "spectral_lower" => bounds[1],
     "spectral_upper" => bounds[2],
     "exact_lambda_min" => first(eigenpairs.values),

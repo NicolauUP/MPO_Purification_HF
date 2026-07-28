@@ -291,3 +291,27 @@ on the same `S=±1` gap-2 Hamiltonian, compare the resulting projector with
 exact diagonalization, and record a final `1e-8` recompression control.
 Outputs are written below
 `$MPO_RESULTS_ROOT/square_lside5_sp2_operational_tol_1e8_gap2/`.
+
+## P2.5: proposed SP2 production error budget
+
+Calibrate the proposed hierarchy below the eventual `1e-3` SCF target on the
+fixed gap-2 Hamiltonian:
+
+```text
+operational itensors_tol       = 1e-10
+SP2 idempotency tolerance      = 2e-4
+SP2 relative trace tolerance   = 1e-6
+final recompression cutoff     = 1e-8
+```
+
+Submit the `maxdim=128` and `256` tasks with:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_p2_5_sp2_error_budget_gap2.slurm
+```
+
+The relative trace tolerance is converted to the size-aware absolute
+tolerance `Ne*1e-6`; it is used only for convergence acceptance. SP2 branch
+selection retains its original numerical tolerance. Results are written to
+`$MPO_RESULTS_ROOT/square_lside5_sp2_error_budget_gap2/`.
