@@ -26,9 +26,9 @@ export MKL_NUM_THREADS="${SLURM_CPUS_PER_TASK:-20}"
 export MPO_RESULTS_ROOT="${MPO_RESULTS_ROOT:?set an external result root}"
 
 case "${SLURM_ARRAY_TASK_ID}" in
-  1) label="history4_cap16"; history=4; coefficient_limit=16 ;;
-  2) label="history4_cap32"; history=4; coefficient_limit=32 ;;
-  3) label="history3_cap16"; history=3; coefficient_limit=16 ;;
+  1) label="history4_cap16"; history=4; warmup=4; coefficient_limit=16 ;;
+  2) label="history4_cap32"; history=4; warmup=4; coefficient_limit=32 ;;
+  3) label="history3_cap16"; history=3; warmup=3; coefficient_limit=16 ;;
   *) echo "unknown array task: ${SLURM_ARRAY_TASK_ID}" >&2; exit 2 ;;
 esac
 
@@ -37,7 +37,7 @@ kpm_output="$root/kpm"
 campaign_file="runs/2d/separable_aubry_andre_lside5/campaign_v2_0p5_strict.jl"
 cd "$REPOSITORY_ROOT"
 mkdir -p "$root"
-echo "label=$label history=$history coefficient_limit=$coefficient_limit"
+echo "label=$label history=$history warmup=$warmup coefficient_limit=$coefficient_limit"
 
 NVCC_PATH="$(readlink -f "$(command -v nvcc)")"
 CUDA_TOOLKIT_ROOT="$(dirname "$(dirname "$NVCC_PATH")")"
@@ -59,7 +59,7 @@ MPO_CUDA_RUNTIME_VERSION="$cuda_runtime_version" \
 KPM_SCF_MIXER=pulay \
 KPM_SCF_PULAY_DAMPING=1.0 \
 KPM_SCF_PULAY_HISTORY="$history" \
-KPM_SCF_PULAY_WARMUP=4 \
+KPM_SCF_PULAY_WARMUP="$warmup" \
 KPM_SCF_PULAY_REGULARIZATION=1e-12 \
 KPM_SCF_PULAY_COEFFICIENT_LIMIT="$coefficient_limit" \
 KPM_SCF_PULAY_DIAGNOSTICS=1 \
