@@ -213,6 +213,11 @@ max_scf_iterations = min(
     )),
 )
 max_scf_iterations > 0 || error("KPM_SCF_MAX_ITERATIONS must be positive")
+pulay_damping = parse(
+    Float64, get(ENV, "KPM_SCF_PULAY_DAMPING", string(params.scf_mixing)),
+)
+0 < pulay_damping <= 1 ||
+    error("KPM_SCF_PULAY_DAMPING must lie in (0, 1]")
 host_probes = probing_matrix(data.N, PROBES, :hadamard, PROBE_SEED)
 probes_backend = backend == :cuda ? CUDA.CuArray(host_probes) : host_probes
 synchronize()
@@ -366,7 +371,7 @@ for iteration in 1:max_scf_iterations
             input_fields = vcat(hartree, fock)
             output_fields = vcat(new_hartree, new_fock)
             mixed_fields, input_mixing_method = pulay_update!(
-                mixer, input_fields, output_fields; damping=mixing,
+                mixer, input_fields, output_fields; damping=pulay_damping,
             )
             hartree = mixed_fields[1:data.N]
             fock = mixed_fields[(data.N + 1):end]
@@ -505,6 +510,7 @@ open(joinpath(output, "metadata.toml"), "w") do io
         "pulay_history" => PULAY_HISTORY,
         "pulay_warmup" => PULAY_WARMUP,
         "pulay_regularization" => PULAY_REGULARIZATION,
+        "pulay_damping" => pulay_damping,
         "spectral_policy" => "per_iteration_gershgorin_with_margin",
         "spectral_margin" => SPECTRAL_MARGIN,
         "scf_converged" => converged,

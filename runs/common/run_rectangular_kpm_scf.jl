@@ -53,6 +53,11 @@ const PULAY_WARMUP = parse(Int, get(ENV, "KPM_SCF_PULAY_WARMUP", "4"))
 const PULAY_REGULARIZATION = parse(
     Float64, get(ENV, "KPM_SCF_PULAY_REGULARIZATION", "1e-12"),
 )
+const PULAY_DAMPING = parse(
+    Float64, get(ENV, "KPM_SCF_PULAY_DAMPING", string(SCF_MIXING)),
+)
+0 < PULAY_DAMPING <= 1 ||
+    error("KPM_SCF_PULAY_DAMPING must lie in (0, 1]")
 const TRACE_TOLERANCE = 1e-6 * NE
 const SPECTRAL_MARGIN = 0.1
 
@@ -399,7 +404,7 @@ function main()
                 input_fields = vcat(hartree, fock)
                 output_fields = vcat(new_hartree, new_fock)
                 mixed_fields, input_mixing_method = pulay_update!(
-                    mixer, input_fields, output_fields; damping=SCF_MIXING,
+                    mixer, input_fields, output_fields; damping=PULAY_DAMPING,
                 )
                 hartree = mixed_fields[1:N]
                 fock = mixed_fields[(N + 1):end]
@@ -500,6 +505,7 @@ function main()
             "pulay_history" => PULAY_HISTORY,
             "pulay_warmup" => PULAY_WARMUP,
             "pulay_regularization" => PULAY_REGULARIZATION,
+            "pulay_damping" => PULAY_DAMPING,
             "scf_converged" => converged,
             "scf_termination_reason" => string(termination_reason),
             "finished_at" => string(now(UTC)),
