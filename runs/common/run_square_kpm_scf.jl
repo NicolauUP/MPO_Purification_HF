@@ -59,6 +59,11 @@ const PULAY_WARMUP = parse(Int, get(ENV, "KPM_SCF_PULAY_WARMUP", "4"))
 const PULAY_REGULARIZATION = parse(
     Float64, get(ENV, "KPM_SCF_PULAY_REGULARIZATION", "1e-12"),
 )
+const PULAY_COEFFICIENT_LIMIT = parse(
+    Float64, get(ENV, "KPM_SCF_PULAY_COEFFICIENT_LIMIT", "8.0"),
+)
+PULAY_COEFFICIENT_LIMIT > 0 ||
+    error("KPM_SCF_PULAY_COEFFICIENT_LIMIT must be positive")
 const PULAY_DIAGNOSTICS = lowercase(get(
     ENV, "KPM_SCF_PULAY_DIAGNOSTICS", "false",
 )) in ("1", "true", "yes")
@@ -253,6 +258,7 @@ last_mu = NaN
 mixer = SCF_MIXER == :pulay ? PulayMixer(
     history=PULAY_HISTORY, warmup=PULAY_WARMUP,
     regularization=PULAY_REGULARIZATION,
+    coefficient_limit=PULAY_COEFFICIENT_LIMIT,
 ) : nothing
 pulay_diagnostics_path = joinpath(output, "pulay_diagnostics.csv")
 if PULAY_DIAGNOSTICS && !isnothing(mixer)
@@ -535,8 +541,9 @@ open(joinpath(output, "metadata.toml"), "w") do io
         "scf_mixer" => string(SCF_MIXER),
         "pulay_history" => PULAY_HISTORY,
         "pulay_warmup" => PULAY_WARMUP,
-        "pulay_regularization" => PULAY_REGULARIZATION,
-        "pulay_damping" => pulay_damping,
+            "pulay_regularization" => PULAY_REGULARIZATION,
+            "pulay_coefficient_limit" => PULAY_COEFFICIENT_LIMIT,
+            "pulay_damping" => pulay_damping,
         "spectral_policy" => "per_iteration_gershgorin_with_margin",
         "spectral_margin" => SPECTRAL_MARGIN,
         "scf_converged" => converged,
