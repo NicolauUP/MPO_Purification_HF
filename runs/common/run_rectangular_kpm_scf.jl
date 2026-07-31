@@ -45,6 +45,14 @@ const FINAL_SEED = 20260730
 const SCF_MIXING = 0.5
 const SCF_TOLERANCE = 1e-3
 const SCF_MAX_ITERATIONS = 30
+const SCF_MIXER = Symbol(lowercase(get(ENV, "KPM_SCF_MIXER", "linear")))
+SCF_MIXER in (:linear, :pulay) ||
+    error("KPM_SCF_MIXER must be linear or pulay")
+const PULAY_HISTORY = parse(Int, get(ENV, "KPM_SCF_PULAY_HISTORY", "6"))
+const PULAY_WARMUP = parse(Int, get(ENV, "KPM_SCF_PULAY_WARMUP", "4"))
+const PULAY_REGULARIZATION = parse(
+    Float64, get(ENV, "KPM_SCF_PULAY_REGULARIZATION", "1e-12"),
+)
 const TRACE_TOLERANCE = 1e-6 * NE
 const SPECTRAL_MARGIN = 0.1
 
@@ -272,7 +280,7 @@ function main()
             "iteration", "spectral_lower", "spectral_upper",
             "chemical_potential", "trace", "trace_error", "vh_residual",
             "vf_residual", "density_residual", "bond_residual",
-            "two_cycle_residual", "energy_total", "checkerboard_order",
+            "two_cycle_residual", "mixing_method", "energy_total", "checkerboard_order",
             "trace_moment_time_s", "local_kpm_time_s",
             "transfer_to_host_time_s", "measurement_time_s",
         ))
@@ -289,10 +297,15 @@ function main()
     converged = false
     termination_reason = :max_iterations
     last_mu = NaN
+    mixer = SCF_MIXER == :pulay ? PulayMixer(
+        history=PULAY_HISTORY, warmup=PULAY_WARMUP,
+        regularization=PULAY_REGULARIZATION,
+    ) : nothing
+    input_mixing_method = :seed
 
     println(
         "Blocked KPM SCF: $(NX)x$(NY), N=$N, M=$MOMENTS, R=$PROBES, " *
-        "block=$PROBE_BLOCK",
+        "block=$PROBE_BLOCK mixer=$SCF_MIXER",
     )
     flush(stdout)
     for iteration in 1:SCF_MAX_ITERATIONS
@@ -337,6 +350,7 @@ function main()
                 iteration, lower, upper, last_mu, trace_value,
                 abs(trace_value - NE), vh_residual, vf_residual,
                 density_residual, bond_residual, two_cycle_residual,
+                input_mixing_method,
                 energy_value.total, order, trace_time,
                 local_observables.kpm_time,
                 local_observables.transfer_time,
@@ -344,10 +358,10 @@ function main()
             ))
         end
         @printf(
-            "SCF %d/%d | Tr=%.6f | μ=%.6f | VH=%.3e | VF=%.3e | n=%.3e | b=%.3e | E=%.6f\n",
+            "SCF %d/%d | Tr=%.6f | μ=%.6f | VH=%.3e | VF=%.3e | n=%.3e | b=%.3e | mix=%s | E=%.6f\n",
             iteration, SCF_MAX_ITERATIONS, trace_value, last_mu,
             vh_residual, vf_residual, density_residual, bond_residual,
-            energy_value.total,
+            string(input_mixing_method), energy_value.total,
         )
         flush(stdout)
         residuals =
@@ -373,11 +387,23 @@ function main()
         if iteration == 1
             hartree = new_hartree
             fock = new_fock
+            input_mixing_method = :direct
         else
-            hartree = SCF_MIXING .* new_hartree .+
-                      (1 - SCF_MIXING) .* hartree
-            fock = SCF_MIXING .* new_fock .+
-                   (1 - SCF_MIXING) .* fock
+            if isnothing(mixer)
+                hartree = SCF_MIXING .* new_hartree .+
+                          (1 - SCF_MIXING) .* hartree
+                fock = SCF_MIXING .* new_fock .+
+                       (1 - SCF_MIXING) .* fock
+                input_mixing_method = :linear
+            else
+                input_fields = vcat(hartree, fock)
+                output_fields = vcat(new_hartree, new_fock)
+                mixed_fields, input_mixing_method = pulay_update!(
+                    mixer, input_fields, output_fields; damping=SCF_MIXING,
+                )
+                hartree = mixed_fields[1:N]
+                fock = mixed_fields[(N + 1):end]
+            end
         end
         H_backend = nothing
         GC.gc()
@@ -470,6 +496,10 @@ function main()
             "moments" => MOMENTS,
             "probes" => PROBES,
             "probe_block" => PROBE_BLOCK,
+            "scf_mixer" => string(SCF_MIXER),
+            "pulay_history" => PULAY_HISTORY,
+            "pulay_warmup" => PULAY_WARMUP,
+            "pulay_regularization" => PULAY_REGULARIZATION,
             "scf_converged" => converged,
             "scf_termination_reason" => string(termination_reason),
             "finished_at" => string(now(UTC)),

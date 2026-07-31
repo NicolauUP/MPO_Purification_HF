@@ -147,6 +147,91 @@ function coordinate_interleaved_code(
     return code
 end
 
+"""Safeguarded Pulay/DIIS mixer for a deterministic fixed-point map.
+
+`pulay_update!(mixer, input, output)` treats `output = F(input)` and stores
+the residual `F(input) - input`. It uses linear mixing during `warmup` calls,
+then forms an affine DIIS combination of recent outputs. Ill-conditioned,
+non-finite, or excessively large extrapolations fall back to linear mixing.
+"""
+mutable struct PulayMixer
+    outputs::Vector{Vector{Float64}}
+    residuals::Vector{Vector{Float64}}
+    history::Int
+    warmup::Int
+    regularization::Float64
+    coefficient_limit::Float64
+    step_limit::Float64
+end
+
+function PulayMixer(; history::Int=6, warmup::Int=4,
+    regularization::Real=1e-12, coefficient_limit::Real=8.0,
+    step_limit::Real=4.0)
+    history >= 2 || error("Pulay history must be at least 2")
+    warmup >= 2 || error("Pulay warmup must be at least 2")
+    regularization >= 0 || error("Pulay regularization must be nonnegative")
+    coefficient_limit > 0 || error("Pulay coefficient limit must be positive")
+    step_limit > 0 || error("Pulay step limit must be positive")
+    return PulayMixer(
+        Vector{Vector{Float64}}(), Vector{Vector{Float64}}(), history,
+        warmup, Float64(regularization), Float64(coefficient_limit),
+        Float64(step_limit),
+    )
+end
+
+function _linear_mixed(input, output, damping)
+    return (1 - damping) .* input .+ damping .* output
+end
+
+function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
+    output::Vector{Float64}; damping::Real=0.5)
+    0 < damping <= 1 || error("Pulay damping must lie in (0, 1]")
+    length(input) == length(output) || error("Pulay input/output size mismatch")
+    residual = output - input
+    push!(mixer.outputs, copy(output))
+    push!(mixer.residuals, residual)
+    while length(mixer.outputs) > mixer.history
+        popfirst!(mixer.outputs)
+        popfirst!(mixer.residuals)
+    end
+
+    linear = _linear_mixed(input, output, damping)
+    count = length(mixer.residuals)
+    count < mixer.warmup && return linear, :linear
+
+    gram = Matrix{Float64}(undef, count, count)
+    for row in 1:count, column in 1:count
+        gram[row, column] = dot(mixer.residuals[row], mixer.residuals[column])
+    end
+    scale = max(maximum(abs, gram), 1.0)
+    @inbounds for index in 1:count
+        gram[index, index] += mixer.regularization * scale
+    end
+    system = zeros(Float64, count + 1, count + 1)
+    system[1:count, 1:count] .= gram
+    system[1:count, count + 1] .= 1.0
+    system[count + 1, 1:count] .= 1.0
+    coefficients = try
+        system \ vcat(zeros(Float64, count), 1.0)
+    catch
+        return linear, :linear_fallback
+    end
+    weights = coefficients[1:count]
+    if !all(isfinite, weights) || maximum(abs, weights) > mixer.coefficient_limit
+        return linear, :linear_fallback
+    end
+
+    candidate = (1 - damping) .* input
+    for index in 1:count
+        candidate .+= damping * weights[index] .* mixer.outputs[index]
+    end
+    if !all(isfinite, candidate) ||
+       norm(candidate - input) > mixer.step_limit * max(norm(residual), eps(Float64))
+        return linear, :linear_fallback
+    end
+    return candidate, :pulay
+end
+
 function kpm_apply(
     scaled_hamiltonian,
     probes,

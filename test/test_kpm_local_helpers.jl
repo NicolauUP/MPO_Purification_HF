@@ -160,4 +160,34 @@ using Statistics
     @test isapprox(chemical_potential.trace, 2.0; atol=1e-10)
     @test isapprox(trace_moments[1], 4.0; atol=1e-14)
     @test isapprox(trace_moments[2], 0.0; atol=1e-14)
+
+    # DIIS should activate only after its requested linear-mixing warmup and
+    # improve the residual of a deterministic two-component fixed-point map.
+    fixed_point_matrix = Diagonal([0.6, 0.2])
+    fixed_point_shift = [1.0, -0.5]
+    fixed_point(x) = fixed_point_matrix * x + fixed_point_shift
+    mixer = PulayMixer(
+        history=4, warmup=3, regularization=1e-14,
+        coefficient_limit=20.0, step_limit=20.0,
+    )
+    input = zeros(2)
+    output = fixed_point(input)
+    input, method = pulay_update!(mixer, input, output; damping=0.5)
+    @test method == :linear
+    output = fixed_point(input)
+    input, method = pulay_update!(mixer, input, output; damping=0.5)
+    @test method == :linear
+    residual_before_pulay = norm(fixed_point(input) - input)
+    output = fixed_point(input)
+    pulay_input, method = pulay_update!(mixer, input, output; damping=0.5)
+    @test method == :pulay
+    @test norm(fixed_point(pulay_input) - pulay_input) < residual_before_pulay
+
+    fallback_mixer = PulayMixer(
+        history=2, warmup=2, coefficient_limit=0.1,
+    )
+    _, method = pulay_update!(fallback_mixer, zeros(2), ones(2))
+    @test method == :linear
+    _, method = pulay_update!(fallback_mixer, ones(2), 2 .* ones(2))
+    @test method == :linear_fallback
 end
