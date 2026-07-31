@@ -87,21 +87,51 @@ function lattice_data(params::ParametersSquare)
     return (; side, N, onsite, bonds, hopping)
 end
 
-function read_column(path, expected_header, column, count)
+function read_site_column(path, expected_header, column, count)
     isfile(path) || error("missing $path")
     values = Vector{Float64}(undef, count)
+    seen = falses(count)
+    open(path) do io
+        header = parse_csv_fields(readline(io))
+        header == expected_header || error("unexpected header in $path: $header")
+        site_index = only(findall(==("site"), header))
+        column_index = only(findall(==(column), header))
+        for line in eachline(io)
+            row = parse_csv_fields(line)
+            site = parse(Int, row[site_index])
+            1 <= site <= count || error("invalid site $site in $path")
+            seen[site] && error("duplicate site $site in $path")
+            values[site] = parse(Float64, row[column_index])
+            seen[site] = true
+        end
+    end
+    all(seen) || error("missing site rows in $path")
+    return values
+end
+
+function read_bond_column(path, expected_header, column, bonds)
+    isfile(path) || error("missing $path")
+    values = Vector{Float64}(undef, length(bonds))
     position = 0
     open(path) do io
         header = parse_csv_fields(readline(io))
         header == expected_header || error("unexpected header in $path: $header")
+        site_index = only(findall(==("site"), header))
+        neighbour_index = only(findall(==("neighbour"), header))
+        orientation_index = only(findall(==("orientation"), header))
         column_index = only(findall(==(column), header))
         for line in eachline(io)
             position += 1
-            position <= count || error("too many rows in $path")
-            values[position] = parse(Float64, parse_csv_fields(line)[column_index])
+            position <= length(bonds) || error("too many bond rows in $path")
+            row = parse_csv_fields(line)
+            expected_site, expected_neighbour, expected_orientation = bonds[position]
+            (parse(Int, row[site_index]), parse(Int, row[neighbour_index]), Symbol(row[orientation_index])) ==
+                (expected_site, expected_neighbour, expected_orientation) ||
+                error("bond ordering mismatch at row $position in $path")
+            values[position] = parse(Float64, row[column_index])
         end
     end
-    position == count || error("expected $count rows in $path, found $position")
+    position == length(bonds) || error("expected $(length(bonds)) bond rows in $path, found $position")
     return values
 end
 
@@ -188,12 +218,12 @@ N = data.N
 Ne = round(Int, params.density * N)
 density_path = joinpath(source_result, "density.csv")
 bonds_path = joinpath(source_result, "bond_order.csv")
-source_density = read_column(
+source_density = read_site_column(
     density_path, ["site", "x", "y", "production", "audit"], "audit", N,
 )
-source_bonds = read_column(
+source_bonds = read_bond_column(
     bonds_path, ["site", "neighbour", "orientation", "production", "audit"],
-    "audit", length(data.bonds),
+    "audit", data.bonds,
 )
 hartree, fock = mean_fields(source_density, source_bonds, data, Float64(params.U))
 lower, upper = gershgorin_bounds(data, hartree, fock)
