@@ -41,5 +41,6 @@ include("test_mcweeny_horner.jl")
 include("test_progress_output.jl")
 include("test_cleanup_policy.jl")
 include("test_end_to_end_regressions.jl")
+include("test_kpm_local_helpers.jl")
 
 println("All MPO_MeanField tests completed successfully.")
