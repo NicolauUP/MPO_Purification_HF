@@ -184,8 +184,10 @@ function _linear_mixed(input, output, damping)
 end
 
 function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
-    output::Vector{Float64}; damping::Real=0.5)
+    output::Vector{Float64}; damping::Real=0.5, linear_damping::Real=damping)
     0 < damping <= 1 || error("Pulay damping must lie in (0, 1]")
+    0 < linear_damping <= 1 ||
+        error("Pulay linear damping must lie in (0, 1]")
     length(input) == length(output) || error("Pulay input/output size mismatch")
     residual = output - input
     push!(mixer.outputs, copy(output))
@@ -195,7 +197,7 @@ function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
         popfirst!(mixer.residuals)
     end
 
-    linear = _linear_mixed(input, output, damping)
+    linear = _linear_mixed(input, output, linear_damping)
     count = length(mixer.residuals)
     count < mixer.warmup && return linear, :linear
 

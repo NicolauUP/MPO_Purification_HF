@@ -404,7 +404,8 @@ function main()
                 input_fields = vcat(hartree, fock)
                 output_fields = vcat(new_hartree, new_fock)
                 mixed_fields, input_mixing_method = pulay_update!(
-                    mixer, input_fields, output_fields; damping=PULAY_DAMPING,
+                    mixer, input_fields, output_fields;
+                    damping=PULAY_DAMPING, linear_damping=SCF_MIXING,
                 )
                 hartree = mixed_fields[1:N]
                 fock = mixed_fields[(N + 1):end]

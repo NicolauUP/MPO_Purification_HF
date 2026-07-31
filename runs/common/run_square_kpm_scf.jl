@@ -371,7 +371,8 @@ for iteration in 1:max_scf_iterations
             input_fields = vcat(hartree, fock)
             output_fields = vcat(new_hartree, new_fock)
             mixed_fields, input_mixing_method = pulay_update!(
-                mixer, input_fields, output_fields; damping=pulay_damping,
+                mixer, input_fields, output_fields;
+                damping=pulay_damping, linear_damping=mixing,
             )
             hartree = mixed_fields[1:data.N]
             fock = mixed_fields[(data.N + 1):end]

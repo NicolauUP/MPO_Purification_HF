@@ -172,8 +172,11 @@ using Statistics
     )
     input = zeros(2)
     output = fixed_point(input)
-    input, method = pulay_update!(mixer, input, output; damping=0.5)
+    input, method = pulay_update!(
+        mixer, input, output; damping=1.0, linear_damping=0.5,
+    )
     @test method == :linear
+    @test input == 0.5 .* output
     output = fixed_point(input)
     input, method = pulay_update!(mixer, input, output; damping=0.5)
     @test method == :linear
