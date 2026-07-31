@@ -166,7 +166,7 @@ end
 
 function PulayMixer(; history::Int=6, warmup::Int=4,
     regularization::Real=1e-12, coefficient_limit::Real=8.0,
-    step_limit::Real=4.0)
+    step_limit::Real=20.0)
     history >= 2 || error("Pulay history must be at least 2")
     warmup >= 2 || error("Pulay warmup must be at least 2")
     regularization >= 0 || error("Pulay regularization must be nonnegative")
@@ -214,11 +214,11 @@ function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
     coefficients = try
         system \ vcat(zeros(Float64, count), 1.0)
     catch
-        return linear, :linear_fallback
+        return linear, :linear_solve_fallback
     end
     weights = coefficients[1:count]
     if !all(isfinite, weights) || maximum(abs, weights) > mixer.coefficient_limit
-        return linear, :linear_fallback
+        return linear, :linear_coefficient_fallback
     end
 
     candidate = (1 - damping) .* input
@@ -227,7 +227,7 @@ function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
     end
     if !all(isfinite, candidate) ||
        norm(candidate - input) > mixer.step_limit * max(norm(residual), eps(Float64))
-        return linear, :linear_fallback
+        return linear, :linear_step_fallback
     end
     return candidate, :pulay
 end

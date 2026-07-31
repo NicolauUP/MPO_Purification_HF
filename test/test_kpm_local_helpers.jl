@@ -189,5 +189,5 @@ using Statistics
     _, method = pulay_update!(fallback_mixer, zeros(2), ones(2))
     @test method == :linear
     _, method = pulay_update!(fallback_mixer, ones(2), 2 .* ones(2))
-    @test method == :linear_fallback
+    @test method == :linear_coefficient_fallback
 end
