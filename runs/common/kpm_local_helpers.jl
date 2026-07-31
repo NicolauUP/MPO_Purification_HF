@@ -218,6 +218,7 @@ mutable struct PulayMixer
     regularization::Float64
     coefficient_limit::Float64
     step_limit::Float64
+    last_diagnostics::Any
 end
 
 function PulayMixer(; history::Int=6, warmup::Int=4,
@@ -231,8 +232,27 @@ function PulayMixer(; history::Int=6, warmup::Int=4,
     return PulayMixer(
         Vector{Vector{Float64}}(), Vector{Vector{Float64}}(), history,
         warmup, Float64(regularization), Float64(coefficient_limit),
-        Float64(step_limit),
+        Float64(step_limit), nothing,
     )
+end
+
+"""Diagnostics from the latest optional Pulay attempt, or `nothing`."""
+pulay_last_diagnostics(mixer::PulayMixer) = mixer.last_diagnostics
+
+function _record_pulay_diagnostics!(
+    mixer::PulayMixer, enabled::Bool; history_size::Int,
+    gram_condition::Real=NaN, max_abs_coefficient::Real=NaN,
+    candidate_to_linear_step_ratio::Real=NaN, status::Symbol,
+)
+    enabled || return nothing
+    mixer.last_diagnostics = (
+        history_size=history_size,
+        gram_condition=Float64(gram_condition),
+        max_abs_coefficient=Float64(max_abs_coefficient),
+        candidate_to_linear_step_ratio=Float64(candidate_to_linear_step_ratio),
+        status=status,
+    )
+    return nothing
 end
 
 function _linear_mixed(input, output, damping)
@@ -240,7 +260,8 @@ function _linear_mixed(input, output, damping)
 end
 
 function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
-    output::Vector{Float64}; damping::Real=0.5, linear_damping::Real=damping)
+    output::Vector{Float64}; damping::Real=0.5, linear_damping::Real=damping,
+    diagnostics::Bool=false)
     0 < damping <= 1 || error("Pulay damping must lie in (0, 1]")
     0 < linear_damping <= 1 ||
         error("Pulay linear damping must lie in (0, 1]")
@@ -255,7 +276,12 @@ function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
 
     linear = _linear_mixed(input, output, linear_damping)
     count = length(mixer.residuals)
-    count < mixer.warmup && return linear, :linear
+    if count < mixer.warmup
+        _record_pulay_diagnostics!(
+            mixer, diagnostics; history_size=count, status=:linear,
+        )
+        return linear, :linear
+    end
 
     gram = Matrix{Float64}(undef, count, count)
     for row in 1:count, column in 1:count
@@ -265,6 +291,7 @@ function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
     @inbounds for index in 1:count
         gram[index, index] += mixer.regularization * scale
     end
+    gram_condition = diagnostics ? cond(gram) : NaN
     system = zeros(Float64, count + 1, count + 1)
     system[1:count, 1:count] .= gram
     system[1:count, count + 1] .= 1.0
@@ -272,21 +299,65 @@ function pulay_update!(mixer::PulayMixer, input::Vector{Float64},
     coefficients = try
         system \ vcat(zeros(Float64, count), 1.0)
     catch
+        _record_pulay_diagnostics!(
+            mixer, diagnostics; history_size=count,
+            gram_condition=gram_condition, status=:linear_solve_fallback,
+        )
         return linear, :linear_solve_fallback
     end
     weights = coefficients[1:count]
-    if !all(isfinite, weights) || maximum(abs, weights) > mixer.coefficient_limit
+    max_abs_coefficient = all(isfinite, weights) ? maximum(abs, weights) : NaN
+    candidate = nothing
+    candidate_to_linear_step_ratio = NaN
+    if diagnostics && all(isfinite, weights)
+        candidate = (1 - damping) .* input
+        for index in 1:count
+            candidate .+= damping * weights[index] .* mixer.outputs[index]
+        end
+        candidate_to_linear_step_ratio = norm(candidate - input) /
+            max(norm(linear - input), eps(Float64))
+    end
+    if !all(isfinite, weights) || max_abs_coefficient > mixer.coefficient_limit
+        _record_pulay_diagnostics!(
+            mixer, diagnostics; history_size=count,
+            gram_condition=gram_condition,
+            max_abs_coefficient=max_abs_coefficient,
+            candidate_to_linear_step_ratio=candidate_to_linear_step_ratio,
+            status=:linear_coefficient_fallback,
+        )
         return linear, :linear_coefficient_fallback
     end
 
-    candidate = (1 - damping) .* input
-    for index in 1:count
-        candidate .+= damping * weights[index] .* mixer.outputs[index]
+    if isnothing(candidate)
+        candidate = (1 - damping) .* input
+        for index in 1:count
+            candidate .+= damping * weights[index] .* mixer.outputs[index]
+        end
+    end
+    if !diagnostics
+        candidate_to_linear_step_ratio = NaN
+    elseif isnan(candidate_to_linear_step_ratio)
+        candidate_to_linear_step_ratio = norm(candidate - input) /
+            max(norm(linear - input), eps(Float64))
     end
     if !all(isfinite, candidate) ||
        norm(candidate - input) > mixer.step_limit * max(norm(residual), eps(Float64))
+        _record_pulay_diagnostics!(
+            mixer, diagnostics; history_size=count,
+            gram_condition=gram_condition,
+            max_abs_coefficient=max_abs_coefficient,
+            candidate_to_linear_step_ratio=candidate_to_linear_step_ratio,
+            status=:linear_step_fallback,
+        )
         return linear, :linear_step_fallback
     end
+    _record_pulay_diagnostics!(
+        mixer, diagnostics; history_size=count,
+        gram_condition=gram_condition,
+        max_abs_coefficient=max_abs_coefficient,
+        candidate_to_linear_step_ratio=candidate_to_linear_step_ratio,
+        status=:pulay,
+    )
     return candidate, :pulay
 end
 

@@ -196,6 +196,14 @@ using Statistics
     )
     _, method = pulay_update!(fallback_mixer, zeros(2), ones(2))
     @test method == :linear
-    _, method = pulay_update!(fallback_mixer, ones(2), 2 .* ones(2))
+    _, method = pulay_update!(
+        fallback_mixer, ones(2), 2 .* ones(2); diagnostics=true,
+    )
     @test method == :linear_coefficient_fallback
+    diagnostic = pulay_last_diagnostics(fallback_mixer)
+    @test diagnostic.status == :linear_coefficient_fallback
+    @test diagnostic.history_size == 2
+    @test diagnostic.max_abs_coefficient > fallback_mixer.coefficient_limit
+    @test isfinite(diagnostic.gram_condition)
+    @test isfinite(diagnostic.candidate_to_linear_step_ratio)
 end

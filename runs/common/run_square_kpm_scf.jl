@@ -59,6 +59,9 @@ const PULAY_WARMUP = parse(Int, get(ENV, "KPM_SCF_PULAY_WARMUP", "4"))
 const PULAY_REGULARIZATION = parse(
     Float64, get(ENV, "KPM_SCF_PULAY_REGULARIZATION", "1e-12"),
 )
+const PULAY_DIAGNOSTICS = lowercase(get(
+    ENV, "KPM_SCF_PULAY_DIAGNOSTICS", "false",
+)) in ("1", "true", "yes")
 
 csv_escape(value) = '"' * replace(string(value), '"' => "\"\"") * '"'
 write_csv_row(io, values) = println(io, join(csv_escape.(values), ','))
@@ -251,6 +254,16 @@ mixer = SCF_MIXER == :pulay ? PulayMixer(
     history=PULAY_HISTORY, warmup=PULAY_WARMUP,
     regularization=PULAY_REGULARIZATION,
 ) : nothing
+pulay_diagnostics_path = joinpath(output, "pulay_diagnostics.csv")
+if PULAY_DIAGNOSTICS && !isnothing(mixer)
+    open(pulay_diagnostics_path, "w") do io
+        write_csv_row(io, (
+            "iteration", "applied_next_iteration", "status", "history_size",
+            "gram_condition", "max_abs_coefficient",
+            "candidate_to_linear_step_ratio",
+        ))
+    end
+end
 input_mixing_method = :seed
 
 println(
@@ -373,7 +386,19 @@ for iteration in 1:max_scf_iterations
             mixed_fields, input_mixing_method = pulay_update!(
                 mixer, input_fields, output_fields;
                 damping=pulay_damping, linear_damping=mixing,
+                diagnostics=PULAY_DIAGNOSTICS,
             )
+            if PULAY_DIAGNOSTICS
+                diagnostic = pulay_last_diagnostics(mixer)
+                open(pulay_diagnostics_path, "a") do io
+                    write_csv_row(io, (
+                        iteration, iteration + 1, diagnostic.status,
+                        diagnostic.history_size, diagnostic.gram_condition,
+                        diagnostic.max_abs_coefficient,
+                        diagnostic.candidate_to_linear_step_ratio,
+                    ))
+                end
+            end
             hartree = mixed_fields[1:data.N]
             fock = mixed_fields[(data.N + 1):end]
         end
