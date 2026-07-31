@@ -96,14 +96,8 @@ function lattice_data()
     return (; codes, seed, bonds, hopping)
 end
 
-function make_probe_blocks(codes, probes, block_size, seed)
-    probes % block_size == 0 ||
-        error("probe count must be divisible by block size")
-    return [
-        coded_hadamard_block(codes, first, block_size, seed)
-        for first in 1:block_size:probes
-    ]
-end
+make_probe_blocks(codes, probes, block_size, seed) =
+    coded_hadamard_block_stream(codes, probes, block_size, seed)
 
 function effective_hamiltonian(data, hartree, fock)
     rows = Vector{Int}(undef, N + 2length(data.bonds))
@@ -154,7 +148,9 @@ function blocked_trace_moments(
 )
     moments = zeros(Float64, degree + 1)
     elapsed = 0.0
+    total_probes = 0
     for host_probes in blocks
+        total_probes += size(host_probes, 2)
         probes_backend =
             backend == :cuda ? CUDA.CuArray(host_probes) : host_probes
         synchronize()
@@ -166,7 +162,8 @@ function blocked_trace_moments(
         probes_backend = nothing
         GC.gc(false)
     end
-    moments ./= sum(block -> size(block, 2), blocks)
+    total_probes > 0 || error("at least one probe block is required")
+    moments ./= total_probes
     return moments, elapsed
 end
 
@@ -265,6 +262,42 @@ function checkerboard_order(density)
     end / N
 end
 
+"""Persist the production SCF result before the optional independent audit.
+
+The audit deliberately uses more moments and probes, so it can require more
+memory than the SCF itself. A failed audit must never discard a converged
+production calculation.
+"""
+function write_production_checkpoint(
+    output, density, bond_order, data, chemical_potential, converged,
+    termination_reason, completed_iterations,
+)
+    energy_value = energy(density, bond_order, data)
+    open(joinpath(output, "production_observables.toml"), "w") do io
+        TOML.print(io, Dict(
+            "scf_converged" => converged,
+            "scf_termination_reason" => string(termination_reason),
+            "scf_iterations" => completed_iterations,
+            "particle_number" => sum(density),
+            "chemical_potential" => chemical_potential,
+            "checkerboard_order" => checkerboard_order(density),
+            "energy_kinetic" => energy_value.kinetic,
+            "energy_hartree" => energy_value.hartree,
+            "energy_fock" => energy_value.fock,
+            "energy_total" => energy_value.total,
+            "final_audit_status" => "pending",
+        ))
+    end
+    open(joinpath(output, "production_density.csv"), "w") do io
+        write_csv_row(io, ("site", "x", "y", "density"))
+        for y in 0:(NY - 1), x in 0:(NX - 1)
+            site = site_index(x, y)
+            write_csv_row(io, (site, x, y, density[site]))
+        end
+    end
+    return energy_value
+end
+
 function main()
     synchronize = backend == :cuda ? CUDA.synchronize : () -> nothing
     device_name = backend == :cuda ? CUDA.name(CUDA.device()) : "CPU"
@@ -301,6 +334,7 @@ function main()
     stable_count = 0
     converged = false
     termination_reason = :max_iterations
+    completed_iterations = 0
     last_mu = NaN
     mixer = SCF_MIXER == :pulay ? PulayMixer(
         history=PULAY_HISTORY, warmup=PULAY_WARMUP,
@@ -314,6 +348,7 @@ function main()
     )
     flush(stdout)
     for iteration in 1:SCF_MAX_ITERATIONS
+        completed_iterations = iteration
         lower, upper = gershgorin_bounds(data, hartree, fock)
         center = (lower + upper) / 2
         halfwidth = (upper - lower) / 2
@@ -416,6 +451,12 @@ function main()
         backend == :cuda && CUDA.reclaim()
     end
 
+    println("Writing production checkpoint before independent final audit")
+    flush(stdout)
+    production_energy = write_production_checkpoint(
+        output, last_density, last_bond_order, data, last_mu, converged,
+        termination_reason, completed_iterations,
+    )
     production_blocks = nothing
     GC.gc()
     backend == :cuda && CUDA.reclaim()
@@ -463,7 +504,6 @@ function main()
     open(joinpath(output, "final_audit.toml"), "w") do io
         TOML.print(io, audit_summary)
     end
-    energy_value = energy(last_density, last_bond_order, data)
     audited_energy = energy(audit.density, audit.bond_order, data)
     open(joinpath(output, "observables.toml"), "w") do io
         TOML.print(io, Dict(
@@ -472,10 +512,10 @@ function main()
             "particle_number" => sum(last_density),
             "chemical_potential" => last_mu,
             "checkerboard_order" => checkerboard_order(last_density),
-            "energy_kinetic" => energy_value.kinetic,
-            "energy_hartree" => energy_value.hartree,
-            "energy_fock" => energy_value.fock,
-            "energy_total" => energy_value.total,
+            "energy_kinetic" => production_energy.kinetic,
+            "energy_hartree" => production_energy.hartree,
+            "energy_fock" => production_energy.fock,
+            "energy_total" => production_energy.total,
             "audited_energy_total" => audited_energy.total,
         ))
     end

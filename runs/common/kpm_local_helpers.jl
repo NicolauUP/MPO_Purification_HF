@@ -82,22 +82,18 @@ function coded_hadamard_matrix(
 end
 
 """A contiguous column block of a nested Hadamard probing matrix."""
-function coded_hadamard_block(
+function _coded_hadamard_block(
     codes::AbstractVector{<:Integer},
     first_column::Int,
     columns::Int,
-    seed::Int,
+    signs::AbstractVector{<:Real},
 )
     N = length(codes)
     first_column >= 1 || error("first_column must be positive")
     columns > 0 || error("columns must be positive")
     first_column + columns - 1 <= N ||
         error("requested Hadamard block exceeds N=$N")
-    ispow2(N) || error("Hadamard probes require a power-of-two dimension")
-    sort!(collect(Int, codes)) == collect(0:(N - 1)) ||
-        error("Hadamard row codes must be a permutation of 0:N-1")
-    rng = Xoshiro(seed)
-    signs = ifelse.(rand(rng, Bool, N), 1.0, -1.0)
+    length(signs) == N || error("Hadamard signs must have length N=$N")
     matrix = Matrix{Float64}(undef, N, columns)
     for local_column in 1:columns
         column = first_column + local_column - 2
@@ -109,6 +105,66 @@ function coded_hadamard_block(
         end
     end
     return matrix
+end
+
+function coded_hadamard_block(
+    codes::AbstractVector{<:Integer},
+    first_column::Int,
+    columns::Int,
+    seed::Int,
+)
+    N = length(codes)
+    ispow2(N) || error("Hadamard probes require a power-of-two dimension")
+    sort!(collect(Int, codes)) == collect(0:(N - 1)) ||
+        error("Hadamard row codes must be a permutation of 0:N-1")
+    rng = Xoshiro(seed)
+    signs = ifelse.(rand(rng, Bool, N), 1.0, -1.0)
+    return _coded_hadamard_block(codes, first_column, columns, signs)
+end
+
+"""A re-iterable, bounded-memory sequence of fixed Hadamard probe blocks.
+
+The stream regenerates one deterministic block on demand. It therefore keeps
+only `O(N * block_size)` probe data resident, rather than storing all probes
+at once. Re-iterating reproduces the identical nested Hadamard probes.
+"""
+struct CodedHadamardBlockStream{C<:AbstractVector{<:Integer},S<:AbstractVector{<:Real}}
+    codes::C
+    signs::S
+    probes::Int
+    block_size::Int
+end
+
+function coded_hadamard_block_stream(
+    codes::AbstractVector{<:Integer},
+    probes::Int,
+    block_size::Int,
+    seed::Int,
+)
+    N = length(codes)
+    ispow2(N) || error("Hadamard probes require a power-of-two dimension")
+    0 < probes <= N || error("PROBES=$probes must lie in 1:N")
+    block_size > 0 || error("Hadamard probe block size must be positive")
+    probes % block_size == 0 ||
+        error("probe count must be divisible by block size")
+    sort!(collect(Int, codes)) == collect(0:(N - 1)) ||
+        error("Hadamard row codes must be a permutation of 0:N-1")
+    rng = Xoshiro(seed)
+    signs = ifelse.(rand(rng, Bool, N), 1.0, -1.0)
+    return CodedHadamardBlockStream(codes, signs, probes, block_size)
+end
+
+Base.IteratorSize(::Type{<:CodedHadamardBlockStream}) = Base.HasLength()
+Base.length(stream::CodedHadamardBlockStream) =
+    div(stream.probes, stream.block_size)
+Base.eltype(::Type{<:CodedHadamardBlockStream}) = Matrix{Float64}
+
+function Base.iterate(stream::CodedHadamardBlockStream, first_column::Int=1)
+    first_column > stream.probes && return nothing
+    block = _coded_hadamard_block(
+        stream.codes, first_column, stream.block_size, stream.signs,
+    )
+    return block, first_column + stream.block_size
 end
 
 hadamard_block(N::Int, first_column::Int, columns::Int, seed::Int) =

@@ -74,6 +74,11 @@ using Statistics
         hadamard_block(8, 1, 3, 42),
         hadamard_block(8, 4, 5, 42),
     ) == probes
+    stream = coded_hadamard_block_stream(codes, 8, 2, 42)
+    @test length(stream) == 4
+    @test hcat(collect(stream)...) == coded
+    @test collect(stream) == collect(stream)
+    @test_throws ErrorException coded_hadamard_block_stream(codes, 7, 2, 42)
 
     rectangular_codes = [
         coordinate_interleaved_code(x, y, 3, 2)
