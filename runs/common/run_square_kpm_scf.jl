@@ -460,6 +460,8 @@ audit = Dict(
     "chemical_potential" => final_mu,
     "trace" => sum(final_density),
     "trace_error" => abs(sum(final_density) - Ne),
+    "audited_checkerboard_order" =>
+        checkerboard_order(final_density, data, params.L),
     "density_max_abs_difference" =>
         maximum(abs, final_density - last_density),
     "density_rms_difference" =>
