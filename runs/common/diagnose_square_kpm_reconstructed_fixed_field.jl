@@ -52,12 +52,10 @@ if backend == :cuda
 end
 
 const CONFIGURATIONS = (
-    (label="M4000_R2048", moments=4000, probes=2048, seed=20260730),
-    (label="M4000_R4096", moments=4000, probes=4096, seed=20260730),
-    (label="M6000_R2048", moments=6000, probes=2048, seed=20260730),
-    (label="M6000_R4096", moments=6000, probes=4096, seed=20260730),
     (label="M8000_R2048", moments=8000, probes=2048, seed=20260730),
-    (label="M8000_R4096", moments=8000, probes=4096, seed=20260730),
+    (label="M12000_R2048", moments=12000, probes=2048, seed=20260730),
+    (label="M16000_R2048", moments=16000, probes=2048, seed=20260730),
+    (label="M20000_R2048", moments=20000, probes=2048, seed=20260730),
 )
 
 csv_escape(value) = '"' * replace(string(value), '"' => "\"\"") * '"'
@@ -314,12 +312,9 @@ open(joinpath(output, "comparisons.csv"), "w") do io
         "checkerboard_order_difference", "energy_total_difference",
     ))
     comparisons = (
-        ("M4000_R2048", "M4000_R4096", "nested_probe_count_at_fixed_M"),
-        ("M4000_R2048", "M6000_R2048", "polynomial_order_at_fixed_nested_probes"),
-        ("M6000_R2048", "M6000_R4096", "nested_probe_count_at_fixed_M"),
-        ("M6000_R2048", "M8000_R2048", "polynomial_order_at_fixed_nested_probes"),
-        ("M4000_R4096", "M6000_R4096", "polynomial_order_at_high_nested_probe_count"),
-        ("M6000_R4096", "M8000_R4096", "polynomial_order_at_high_nested_probe_count"),
+        ("M8000_R2048", "M12000_R2048", "polynomial_order_at_fixed_nested_probes"),
+        ("M12000_R2048", "M16000_R2048", "polynomial_order_at_fixed_nested_probes"),
+        ("M16000_R2048", "M20000_R2048", "polynomial_order_at_fixed_nested_probes"),
     )
     for (left_label, right_label, interpretation) in comparisons
         left, right = results[left_label], results[right_label]
