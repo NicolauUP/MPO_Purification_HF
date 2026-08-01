@@ -159,6 +159,23 @@ function local_estimates(filtered, probes, bonds)
     return (; density, bond_order)
 end
 
+"""Estimate the trace-normalized projector idempotency defect from probes.
+
+For real symmetric `P`, the stochastic identities are
+`Tr(P) = E[z' * P * z]` and `Tr(P^2) = E[||P * z||^2]`. Thus this does
+not require an additional KPM application after `filtered = P * probes` has
+already been transferred to the host. It is a global fractional-occupation
+diagnostic, distinct from the MPO relative-Frobenius residual.
+"""
+function trace_idempotency_defect(filtered, probes)
+    R = size(probes, 2)
+    trace_estimate = sum(filtered .* probes) / R
+    trace_squared_estimate = sum(abs2, filtered) / R
+    defect = abs(trace_estimate - trace_squared_estimate) /
+        max(abs(trace_estimate), sqrt(eps(Float64)))
+    return (; trace_estimate, trace_squared_estimate, defect)
+end
+
 function mean_fields(density, bond_order, data, U)
     hartree = zeros(Float64, data.N)
     for (site, neighbour, _) in data.bonds
@@ -236,7 +253,8 @@ history_path = joinpath(output, "scf_history.csv")
 open(history_path, "w") do io
     write_csv_row(io, (
         "iteration", "spectral_lower", "spectral_upper",
-        "chemical_potential", "trace", "trace_error", "vh_residual",
+        "chemical_potential", "trace", "trace_error", "trace_squared_estimate",
+        "trace_idempotency_defect", "vh_residual",
         "vf_residual", "density_residual", "bond_residual",
         "two_cycle_residual", "mixing_method", "energy_total", "checkerboard_order",
         "trace_moment_time_s", "local_kpm_time_s",
@@ -251,6 +269,7 @@ previous_bond_order = nothing
 density_two_steps_ago = nothing
 last_density = zeros(Float64, data.N)
 last_bond_order = zeros(Float64, length(data.bonds))
+last_trace_idempotency_defect = NaN
 converged = false
 termination_reason = :max_iterations
 stable_count = 0
@@ -320,6 +339,7 @@ for iteration in 1:max_scf_iterations
     measurement = @timed local_estimates(filtered, host_probes, data.bonds)
     density = measurement.value.density
     bond_order = measurement.value.bond_order
+    projector_diagnostics = trace_idempotency_defect(filtered, host_probes)
     new_hartree, new_fock =
         mean_fields(density, bond_order, data, Float64(params.U))
 
@@ -336,11 +356,13 @@ for iteration in 1:max_scf_iterations
     energy = hf_energy(data, density, bond_order, Float64(params.U))
     order = checkerboard_order(density, data, params.L)
     trace_value = sum(density)
+    idempotency_defect = projector_diagnostics.defect
 
     open(history_path, "a") do io
         write_csv_row(io, (
             iteration, lower, upper, last_mu, trace_value,
-            abs(trace_value - Ne), vh_residual, vf_residual,
+            abs(trace_value - Ne), projector_diagnostics.trace_squared_estimate,
+            idempotency_defect, vh_residual, vf_residual,
             density_residual, bond_residual, two_cycle_residual,
             input_mixing_method, energy.total,
             order, trace_calculation.time, kpm_calculation.time,
@@ -348,8 +370,9 @@ for iteration in 1:max_scf_iterations
         ))
     end
     @printf(
-        "SCF %d/%d | Tr=%.9f | μ=%.6f | VH=%.3e | VF=%.3e | n=%.3e | b=%.3e | mix=%s | E=%.9f | bounds=[%.3f,%.3f]\n",
+        "SCF %d/%d | Tr=%.9f | μ=%.6f | idem=%.3e | VH=%.3e | VF=%.3e | n=%.3e | b=%.3e | mix=%s | E=%.9f | bounds=[%.3f,%.3f]\n",
         iteration, max_scf_iterations, trace_value, last_mu,
+        idempotency_defect,
         vh_residual, vf_residual, density_residual, bond_residual,
         string(input_mixing_method), energy.total, lower, upper,
     )
@@ -363,6 +386,7 @@ for iteration in 1:max_scf_iterations
     end
     last_density = density
     last_bond_order = bond_order
+    last_trace_idempotency_defect = idempotency_defect
     if stable_count >= 2
         converged = true
         termination_reason = :converged
@@ -452,6 +476,8 @@ final_measurement =
     local_estimates(final_filtered, final_host_probes, data.bonds)
 final_density = final_measurement.density
 final_bond_order = final_measurement.bond_order
+final_projector_diagnostics =
+    trace_idempotency_defect(final_filtered, final_host_probes)
 
 audit = Dict(
     "moments" => FINAL_MOMENTS,
@@ -460,6 +486,8 @@ audit = Dict(
     "chemical_potential" => final_mu,
     "trace" => sum(final_density),
     "trace_error" => abs(sum(final_density) - Ne),
+    "trace_squared_estimate" => final_projector_diagnostics.trace_squared_estimate,
+    "trace_idempotency_defect" => final_projector_diagnostics.defect,
     "audited_checkerboard_order" =>
         checkerboard_order(final_density, data, params.L),
     "density_max_abs_difference" =>
@@ -483,6 +511,7 @@ open(joinpath(output, "observables.toml"), "w") do io
         "scf_converged" => converged,
         "scf_termination_reason" => string(termination_reason),
         "particle_number" => sum(last_density),
+        "trace_idempotency_defect" => last_trace_idempotency_defect,
         "chemical_potential" => last_mu,
         "checkerboard_order" =>
             checkerboard_order(last_density, data, params.L),
@@ -499,6 +528,7 @@ open(joinpath(output, "observables.toml"), "w") do io
             data, last_density, last_bond_order, Float64(params.U),
         ).total,
         "audited_energy_total" => final_energy.total,
+        "audited_trace_idempotency_defect" => final_projector_diagnostics.defect,
     ))
 end
 open(joinpath(output, "density.csv"), "w") do io
