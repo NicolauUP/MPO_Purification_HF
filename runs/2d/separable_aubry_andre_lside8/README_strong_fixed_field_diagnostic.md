@@ -9,10 +9,9 @@ It evaluates four nested-Hadamard configurations:
 
 | Configuration | Purpose |
 |---|---|
-| `M3200_R2048` | baseline |
-| `M3200_R4096` | probe-count change at fixed degree |
-| `M4000_R2048` | degree change at fixed probe prefix |
-| `M4000_R4096` | combined high-accuracy reference |
+| `M4000_R2048`, `M4000_R4096` | calibrated baseline and probe-count check |
+| `M6000_R2048`, `M6000_R4096` | first degree refinement and probe-count check |
+| `M8000_R2048`, `M8000_R4096` | conservative high-degree candidate and probe-count check |
 
 The comparison is faithful to the saved final local observables, but the
 historical SCF runner did not persist its mixed Hartree/Fock vectors. Thus the
