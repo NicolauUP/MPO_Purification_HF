@@ -3,8 +3,13 @@
 Usage: julia run_block_spamm_scf_1d.jl OUTPUT [N] [V2] [U] [SEED]
 """
 
-ENV["SPAMM_LIBRARY_ONLY"] = "true"
-include(joinpath(@__DIR__, "diagnose_block_spamm_gpu_frontend.jl"))
+using CUDA
+using LinearAlgebra
+using SparseArrays
+using TOML
+
+include(joinpath(@__DIR__, "..", "..", "src", "solvers", "spamm", "block_sp2.jl"))
+using .BlockSp2Engine
 
 length(ARGS) in 1:5 || error("usage: run_block_spamm_scf_1d.jl OUTPUT [N] [V2] [U] [SEED]")
 const OUT = abspath(ARGS[1])
@@ -69,11 +74,11 @@ function solve_scf(method::Symbol)
             P0, _ = initial_projector_argument(H)
             step_output = joinpath(OUT, "sp2_iteration_$(lpad(iteration, 3, '0'))")
             mkpath(step_output)
-            device = gpu_scheduled_sp2_continuation(
+            device = purify_gpu_block_sp2!(
                 P0, BLOCK_SIZE, PARTICLES, SPAMM_TAU, SP2_STEPS,
-                OUTPUT_CUTOFF, step_output,
+                OUTPUT_CUTOFF; output=step_output,
             )
-            P = Matrix(device_to_sparse(device, NS))
+            P = Matrix(cublock_to_host_csr(device, NS))
             device = nothing
         end
         candidate_density, candidate_bonds = fields_from_projector(P)
