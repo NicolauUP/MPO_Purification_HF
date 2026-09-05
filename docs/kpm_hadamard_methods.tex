@@ -1,0 +1,243 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.25cm]{geometry}
+\usepackage{amsmath,amssymb,mathtools,booktabs,microtype}
+\usepackage{graphicx}
+\usepackage[hidelinks]{hyperref}
+\usepackage{enumitem}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{5pt}
+\makeatletter
+\renewcommand\@seccntformat[1]{\csname the#1\endcsname\quad}
+\makeatother
+\newcommand{\Tr}{\operatorname{Tr}}
+\newcommand{\norm}[1]{\left\lVert #1\right\rVert}
+\newcommand{\figurefile}[2]{%
+  \IfFileExists{#1}{\includegraphics[width=#2\linewidth]{#1}}%
+  {\fbox{\parbox[c][0.22\textheight][c]{#2\linewidth}{\centering
+  Run the notebook export cell to create this figure.}}}}
+\title{Kernel Polynomial Hartree--Fock with Structured Hadamard Probes}
+\author{Method note for the large-scale quasiperiodic calculations}
+\date{August 2026}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note describes the kernel polynomial method (KPM) implementation used to
+obtain zero-temperature density matrices and local Hartree--Fock fields on
+large open quasiperiodic lattices. The method never stores the density matrix:
+it applies an approximation to the occupied projector to blocks of vectors and
+estimates only the diagonal and nearest-neighbour elements needed by the
+Hartree and Fock terms. We explain the polynomial, chemical-potential, and
+self-consistent parts of the calculation; the limitations of ordinary random
+trace estimators; and why randomized, nested Hadamard probes are the practical
+choice for the present accuracy target.
+\end{abstract}
+
+\section{\hspace{0.5em}Mean-field problem}
+We consider a real, spinless nearest-neighbour Hamiltonian on an open square
+lattice. The hopping amplitudes may be quasiperiodically modulated. At a
+Hartree--Fock fixed point the effective one-particle Hamiltonian is
+\begin{equation}
+ H_{\rm eff}=H_0+V_{\rm H}+V_{\rm F},\qquad
+ \rho_{ij}=\langle c_j^\dagger c_i\rangle .
+\end{equation}
+For nearest-neighbour repulsion $U$, the local fields used in the calculation
+are
+\begin{align}
+ (V_{\rm H})_{ii} &= U\sum_{j\in {\rm nn}(i)}\rho_{jj}, \\
+ (V_{\rm F})_{ij} &= -U\,\mathrm{Re}\,\rho_{ij},
+ \qquad i,j\text{ nearest neighbours}.
+\end{align}
+Only $n_i=\rho_{ii}$ and the two forward bond fields are consequently needed;
+a dense $N\times N$ density matrix is unnecessary. At zero temperature and
+fixed particle number $N_e$, the target is
+\begin{equation}
+ P=\Theta(\mu-H_{\rm eff}),\qquad \Tr P=N_e .
+ \label{eq:projector}
+\end{equation}
+KPM avoids constructing $P$ by applying an approximation to it to probe
+vectors. The chemical potential is adjusted at every SCF iteration so that the
+approximated trace has the requested filling.
+
+\section{\hspace{0.5em}Chebyshev approximation}
+An enclosing spectral interval $[E_-,E_+]$ is required for each effective
+Hamiltonian. With
+\begin{equation}
+ \widetilde H=\frac{H_{\rm eff}-bI}{a},\qquad
+ a=\frac{E_+-E_-}{2},\qquad b=\frac{E_++E_-}{2},
+\end{equation}
+the spectrum lies in $[-1,1]$. The chemical potential is similarly scaled as
+$\widetilde\mu=(\mu-b)/a$. A degree-$M$ KPM projector is
+\begin{equation}
+ P_M(\mu)=\sum_{m=0}^{M}g_m c_m(\widetilde\mu) T_m(\widetilde H),
+ \label{eq:kpm}
+\end{equation}
+where $T_m$ is a Chebyshev polynomial, $c_m$ is the occupied-step coefficient,
+and $g_m$ is a damping-kernel coefficient. Kernel damping is essential: a
+bare truncated representation of a discontinuous Fermi step has Gibbs
+oscillations, giving fractional occupations and oscillatory local fields.
+Finite $M$ is therefore a controlled spectral broadening, not an exact sharp
+projector.
+
+For a vector $z$, no matrix polynomial is formed. Instead,
+\begin{align}
+ q_0&=z, &q_1&=\widetilde H z,\\
+ q_{m+1}&=2\widetilde Hq_m-q_{m-1},& P_Mz&=\sum_m g_mc_mq_m .
+ \label{eq:recurrence}
+\end{align}
+Only three vector blocks are live during the recurrence. The nearest-neighbour
+Hamiltonian has a bounded local stencil, so applying it to a block of $B$
+probes costs $\mathcal O(NB)$. The dominant cost is $\mathcal O(NMR)$ for $R$
+probes. Blocking makes this compatible with GPU memory, which is why the
+method can treat millions of sites without a density matrix in memory.
+
+\section{\hspace{0.5em}Trace correction and local estimators}
+Let $Z=[z_1,\ldots,z_R]$ and $Y=P_MZ$. The estimators used for the trace,
+density, and bond order are
+\begin{align}
+ \widehat{\Tr P_M}&=\frac1R\sum_r z_r^\mathsf T y_r,\\
+ \widehat n_i&=\frac1R\sum_r z_{ir}y_{ir},\\
+ \widehat\rho_{ij}&=\frac1R\sum_r z_{ir}y_{jr}.
+ \label{eq:estimators}
+\end{align}
+The last estimator is required only on horizontal and vertical bonds. The
+Hartree and Fock fields are then rebuilt directly from these local arrays. The
+trace equation
+\begin{equation}
+ \widehat N(\mu)=\widehat{\Tr P_M(\mu)}=N_e
+\end{equation}
+is solved for $\mu$ during every SCF step. This is not optional at high
+precision: finite polynomial order, open boundaries, and updated fields all
+shift the apparent Fermi level.
+
+\section{\hspace{0.5em}What goes wrong with ordinary stochastic probes}
+For independent Rademacher vectors, $z_i=\pm1$, the estimators in
+Eq.~\eqref{eq:estimators} are unbiased. But their local variance is
+\begin{equation}
+ \mathrm{Var}(\widehat n_i)=\frac1R\sum_{j\ne i}|(P_M)_{ij}|^2 .
+ \label{eq:variance}
+\end{equation}
+Thus local noise is controlled by off-diagonal projector weight, not by the
+trace alone. In a low-gap or strongly quasiperiodic problem that weight can be
+long ranged and spatially nonuniform.
+
+Three limitations make independent random probes a poor production default for
+self-consistent local fields. First, noise in $n_i$ and $\rho_{ij}$ enters the
+Hartree potential and Fock hopping, so it becomes noise in the SCF map itself.
+Apparent stagnation may then be sampling noise rather than a physical failure
+of fixed-point iteration. Second, an accurate total trace does not certify an
+accurate localized density peak or bond: scalar errors can cancel. Third,
+independent $R$ and $2R$ samples do not give a clean convergence comparison,
+because the probe subspace and random realization both change.
+
+The usual $R^{-1/2}$ behaviour is costly. A tenfold reduction of the standard
+error requires roughly one hundred times more independent probes, and that
+cost is incurred at every SCF step. Random probes remain useful for rough
+estimates, but they do not give the reproducible local error control required
+here.
+
+\section{\hspace{0.5em}Randomized Hadamard probes}
+For $N=2^L$, let $H_N$ be a Walsh--Hadamard matrix. It satisfies
+\begin{equation}
+ H_NH_N^\mathsf T=NI .
+\end{equation}
+The calculation selects columns of a randomly signed and randomly permuted
+Hadamard basis. Each probe has only $\pm1$ entries, is generated efficiently
+from bit parity, and is exactly orthogonal to every other selected probe. At
+full coverage,
+\begin{equation}
+ \frac1N H_NH_N^\mathsf T=I.
+ \label{eq:hadamardexact}
+\end{equation}
+Consequently, for $R=N$, all estimators in Eq.~\eqref{eq:estimators} are exact
+for \emph{any} matrix $P_M$: the trace, every density, and every selected bond
+have no probe error. A finite Rademacher sample has no analogous endpoint.
+
+At $R<N$, Hadamard probing is not magically exact and does not remove finite
+polynomial error. Its operational advantages are nevertheless decisive:
+\begin{itemize}[leftmargin=1.7em]
+\item orthogonality avoids redundant probe directions;
+\item nested prefixes $R\subset2R\subset4R\cdots$ give a directly interpretable
+same-realization probe ladder;
+\item powers of two align with the bit-quantized lattice indexing;
+\item a fixed scrambling produces a deterministic, reproducible SCF map; and
+\item a second scrambling gives an independent probe check.
+\end{itemize}
+Hadamard probing is not a mathematical requirement of KPM. It is necessary in
+the practical sense relevant here: it provides reproducible local observables,
+an exact full-coverage limit, and a meaningful $R\to2R$ uncertainty test at a
+probe count far below $N$.
+
+\section{\hspace{0.5em}Separating the three numerical errors}
+There are three distinct approximations:
+\begin{enumerate}[leftmargin=1.7em]
+\item SCF error: input and output fields have not reached a fixed point;
+\item polynomial error: degree $M$ still broadens the Fermi projector; and
+\item probe error: finite $R$ estimates local observables imperfectly.
+\end{enumerate}
+They must be measured separately. On a dense-reference system, calibrate both
+$M$ and $R$ against exact local density and bonds. On a large system, save a
+fixed effective field and compare nested $R$ and $2R$ at fixed $M$; then
+compare $M$ with higher $M$ at fixed nested $R$. Only after those fixed-field
+tests should one choose production parameters for full SCF. Finally, rebuild
+the converged fields and perform an independent higher-$M$ audit with a second
+Hadamard scrambling. Report RMS and maximum local density and bond differences,
+not only energy and particle number.
+
+The KPM global idempotency diagnostic is
+\begin{equation}
+ d_{\rm tr}=\frac{|\widehat{\Tr(P_M^2)}-\widehat{\Tr(P_M)}|}
+ {|\widehat{\Tr(P_M)}|},
+\end{equation}
+where $\Tr(P_M^2)$ is estimated from $\norm{P_Mz_r}^2$. It diagnoses global
+fractional occupation. It is useful but is not the MPO/SP2 relative Frobenius
+residual $\norm{P^2-P}_F/\norm P_F$, and it cannot bound the largest local
+error. The independent audit is therefore essential.
+
+\section{\hspace{0.5em}Computed strong-quasiperiodic example}
+The $256\times256$ strong quasiperiodic calculation used $M=40000$, $R=2048$
+inside SCF and an independent $M=60000$, $R=2048$ audit. It reached the
+relative $10^{-3}$ SCF threshold in nine iterations. Production and audit
+agree in checkerboard order to $4.7\times10^{-8}$, in total energy to about
+$2\times10^{-3}$, and in density RMS to $1.86\times10^{-5}$. The maximum
+sitewise density difference is $4.49\times10^{-3}$, showing why global
+observables alone are not a sufficient accuracy certificate in a localized
+regime. The trace idempotency defect was about $1.5\times10^{-5}$ for both
+calculations.
+
+The accompanying notebook exports the figures below from the saved density
+maps. The Fourier plot uses a Tukey window to suppress open-boundary
+background before the FFT; it is therefore a diagnostic of bulk modulation,
+not a periodic-boundary structure factor.
+
+\begin{figure}[t]
+\centering
+\figurefile{figures/strong_m40000/density_full.pdf}{.92}
+\caption{Full production density relative to half filling.}
+\label{fig:density}
+\end{figure}
+\begin{figure}[t]
+\centering
+\figurefile{figures/strong_m40000/density_audit_difference.pdf}{.98}
+\caption{Audit density and the local production--audit difference near the
+largest discrepancy.}
+\label{fig:audit}
+\end{figure}
+\begin{figure}[t]
+\centering
+\figurefile{figures/strong_m40000/density_fft_tukey.pdf}{.92}
+\caption{Tukey-windowed density Fourier spectrum, with expected
+quasiperiodic sidebands marked by crosses.}
+\label{fig:fft}
+\end{figure}
+
+\section{\hspace{0.5em}Scope and limitations}
+KPM with structured probes changes the dominant task from density-matrix
+storage to repeated sparse local Hamiltonian applications. It can therefore
+reach lattices far beyond dense diagonalization. It does not remove the need
+for calibration: small gaps demand high $M$; rare localized features can make
+maximum errors much larger than RMS errors; and a new hopping pattern,
+interaction range, or boundary condition requires its own $M$/$R$ evidence.
+The method is trustworthy only when the SCF, polynomial, and probe errors are
+reported separately.
+\end{document}

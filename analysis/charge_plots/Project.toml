@@ -1,0 +1,9 @@
+name = "MPOChargePlots"
+uuid = "c2a2a7f5-0a7c-4a6c-9d6d-41c2f98e5d0d"
+version = "0.1.0"
+
+[deps]
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+FFTW = "7a1cc6ca-52ef-59f5-83cd-3a7055c09341"
+HDF5 = "f67ccb44-e63f-5c2f-98bd-6dc0ccc4ba2f"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
