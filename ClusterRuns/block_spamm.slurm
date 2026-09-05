@@ -22,9 +22,14 @@ fi
 : "${V2:=0.5}"
 : "${OUTPUT_DIR:=results/block_spamm_${SLURM_JOB_ID:-manual}}"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export REPOSITORY_ROOT="${REPOSITORY_ROOT:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
-cd "$REPOSITORY_ROOT"
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]] && [[ -f "${SLURM_SUBMIT_DIR}/../Project.toml" ]]; then
+  export REPOSITORY_ROOT="$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]] && [[ -f "${SLURM_SUBMIT_DIR}/Project.toml" ]]; then
+  export REPOSITORY_ROOT="${SLURM_SUBMIT_DIR}"
+else
+  export REPOSITORY_ROOT="${REPOSITORY_ROOT:-$(pwd)}"
+fi
+cd "${REPOSITORY_ROOT}"
 mkdir -p logs "$OUTPUT_DIR"
 RUN_OUTPUT="$OUTPUT_DIR/$TASK"
 

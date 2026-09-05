@@ -17,9 +17,15 @@ set -euo pipefail
 : "${DEFER_OBSERVABLES:=false}"
 : "${VERBOSE:=true}"
 
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]] && [[ -f "${SLURM_SUBMIT_DIR}/../Project.toml" ]]; then
+  export REPOSITORY_ROOT="$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]] && [[ -f "${SLURM_SUBMIT_DIR}/Project.toml" ]]; then
+  export REPOSITORY_ROOT="${SLURM_SUBMIT_DIR}"
+else
+  export REPOSITORY_ROOT="${REPOSITORY_ROOT:-$(pwd)}"
+fi
+cd "${REPOSITORY_ROOT}"
 mkdir -p logs "$OUTPUT_ROOT"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export REPOSITORY_ROOT="${REPOSITORY_ROOT:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
 [ -f runs/common/slurm_cuda_runtime.sh ] && source runs/common/slurm_cuda_runtime.sh
 
 julia --project=. bin/mpohf.jl --campaign "$CAMPAIGN" --task "$TASK" --method "$METHOD" --output "$OUTPUT_ROOT"

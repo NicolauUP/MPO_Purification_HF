@@ -26,9 +26,15 @@ set -euo pipefail
 : "${PROJECTOR_MODE:=exact}"
 : "${CUTOFFS:=1e-14,1e-12,1e-10,1e-8,1e-6}"
 
+if [[ -n "${SLURM_SUBMIT_DIR:-}" ]] && [[ -f "${SLURM_SUBMIT_DIR}/../Project.toml" ]]; then
+  export REPOSITORY_ROOT="$(cd "${SLURM_SUBMIT_DIR}/.." && pwd)"
+elif [[ -n "${SLURM_SUBMIT_DIR:-}" ]] && [[ -f "${SLURM_SUBMIT_DIR}/Project.toml" ]]; then
+  export REPOSITORY_ROOT="${SLURM_SUBMIT_DIR}"
+else
+  export REPOSITORY_ROOT="${REPOSITORY_ROOT:-$(pwd)}"
+fi
+cd "${REPOSITORY_ROOT}"
 mkdir -p logs "$OUTPUT_DIR"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-export REPOSITORY_ROOT="${REPOSITORY_ROOT:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
 [ -f runs/common/slurm_cuda_runtime.sh ] && source runs/common/slurm_cuda_runtime.sh
 
 case "$TASK" in
