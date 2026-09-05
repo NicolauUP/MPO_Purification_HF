@@ -58,12 +58,16 @@ return the resulting diagonal MPO. The symmetrization preserves the current
 Hartree convention `real(rho[i,i])` when finite MPO truncation leaves a small
 anti-Hermitian diagonal component.
 """
-function _density_diagonal_qtt_tensors(rho::MPO, sites::Vector{<:Index})
+function _density_diagonal_qtt_tensors(
+    rho::MPO,
+    sites::Vector{<:Index};
+    to_backend=identity,
+)
     tensors = Vector{ITensor}(undef, length(sites))
     for site_number in eachindex(sites)
         site = sites[site_number]
         output_site = sim(site)
-        projected = rho[site_number] * delta(prime(site), site, output_site)
+        projected = rho[site_number] * to_backend(delta(prime(site), site, output_site))
         tensors[site_number] = replaceind(projected, output_site => site)
     end
     return tensors
@@ -74,10 +78,27 @@ function _diagonal_mpo_from_qtt_tensors(
     sites::Vector{<:Index},
     params::AbstractModelParameters;
     symmetrize::Bool=true,
+    to_backend=identity,
 )
     diagonal = MPO(length(sites))
     for site_number in eachindex(sites)
-        diagonal[site_number] = Quantics._asdiagonal(tensors[site_number], sites[site_number])
+        if to_backend === identity
+            diagonal[site_number] = Quantics._asdiagonal(
+                tensors[site_number], sites[site_number],
+            )
+        else
+            # Quantics._asdiagonal currently materializes `Array(tensor)`,
+            # which forces device tensors through the host. The three-index
+            # delta duplicates the coefficient's physical bit into the MPO
+            # bra/ket indices while preserving the tensor storage backend.
+            site = sites[site_number]
+            output_site = sim(site)
+            diagonalizer = to_backend(delta(site, prime(site), output_site))
+            diagonal[site_number] = replaceind(
+                tensors[site_number] * diagonalizer,
+                output_site => site,
+            )
+        end
     end
     if symmetrize
         return +(0.5 * diagonal, 0.5 * ITensors.dag(diagonal);
@@ -270,6 +291,8 @@ function _shift_qtt_tensors_binary_carry_square(
     tensors::Vector{ITensor},
     sites::Vector{<:Index},
     direction::Symbol,
+    ;
+    to_backend=identity,
 )
     length(tensors) == length(sites) || throw(ArgumentError(
         "tensor and site counts must agree",
@@ -310,10 +333,14 @@ function _shift_qtt_tensors_binary_carry_square(
                 is_active ? carry_out == 0 || continue : carry_in == 0 || continue
             end
 
-            term = tensors[site_number] * onehot(site => input_bit + 1)
-            term *= onehot(site => output_bit + 1)
-            site_number > 1 && (term *= onehot(carries[site_number - 1] => carry_out + 1))
-            site_number < L && (term *= onehot(carries[site_number] => carry_in + 1))
+            term = tensors[site_number] * to_backend(onehot(site => input_bit + 1))
+            term *= to_backend(onehot(site => output_bit + 1))
+            site_number > 1 && (term *= to_backend(
+                onehot(carries[site_number - 1] => carry_out + 1),
+            ))
+            site_number < L && (term *= to_backend(
+                onehot(carries[site_number] => carry_in + 1),
+            ))
             local_tensor = isnothing(local_tensor) ? term : local_tensor + term
         end
         shifted[site_number] = local_tensor
@@ -321,7 +348,7 @@ function _shift_qtt_tensors_binary_carry_square(
 
     for site_number in 1:(L - 1)
         density_link = commonind(tensors[site_number], tensors[site_number + 1])
-        fuse_links = combiner(density_link, carries[site_number])
+        fuse_links = to_backend(combiner(density_link, carries[site_number]))
         shifted[site_number] *= fuse_links
         shifted[site_number + 1] *= ITensors.dag(fuse_links)
     end
@@ -346,6 +373,8 @@ function _density_neighbour_band_qtt_tensors_binary_carry_square(
     rho::MPO,
     sites::Vector{<:Index},
     direction::Symbol,
+    ;
+    to_backend=identity,
 )
     length(rho) == length(sites) || throw(ArgumentError(
         "density MPO and site count must agree",
@@ -383,11 +412,15 @@ function _density_neighbour_band_qtt_tensors_binary_carry_square(
                 is_active ? carry_out == 0 || continue : carry_in == 0 || continue
             end
 
-            term = rho[site_number] * onehot(prime(site) => row_bit + 1)
-            term *= onehot(site => column_bit + 1)
-            term *= onehot(output_site => row_bit + 1)
-            site_number > 1 && (term *= onehot(carries[site_number - 1] => carry_out + 1))
-            site_number < L && (term *= onehot(carries[site_number] => carry_in + 1))
+            term = rho[site_number] * to_backend(onehot(prime(site) => row_bit + 1))
+            term *= to_backend(onehot(site => column_bit + 1))
+            term *= to_backend(onehot(output_site => row_bit + 1))
+            site_number > 1 && (term *= to_backend(
+                onehot(carries[site_number - 1] => carry_out + 1),
+            ))
+            site_number < L && (term *= to_backend(
+                onehot(carries[site_number] => carry_in + 1),
+            ))
             local_tensor = isnothing(local_tensor) ? term : local_tensor + term
         end
         band[site_number] = replaceind(local_tensor, output_site => site)
@@ -395,7 +428,7 @@ function _density_neighbour_band_qtt_tensors_binary_carry_square(
 
     for site_number in 1:(L - 1)
         density_link = commonind(rho[site_number], rho[site_number + 1])
-        fuse_links = combiner(density_link, carries[site_number])
+        fuse_links = to_backend(combiner(density_link, carries[site_number]))
         band[site_number] *= fuse_links
         band[site_number + 1] *= ITensors.dag(fuse_links)
     end
@@ -476,13 +509,15 @@ function _apply_square_neighbour_adjacency(
     ;
     cutoff::Real,
     maxdim::Integer,
+    to_backend=identity,
 )
     isfinite(cutoff) && cutoff >= 0 || throw(ArgumentError(
         "square Hartree cutoff must be finite and nonnegative",
     ))
     maxdim > 0 || throw(ArgumentError("square Hartree maxdim must be positive"))
     density = MPS(tensors)
-    field = apply(square_neighbour_adjacency_mpo(sites), density;
+    adjacency = to_backend(square_neighbour_adjacency_mpo(sites))
+    field = apply(adjacency, density;
         cutoff=cutoff,
         maxdim=maxdim,
     )
@@ -545,18 +580,23 @@ function extract_hartree_mpo_binary_carry_square_adjacency(
     sys::System;
     cutoff::Real=1e-12,
     maxdim::Integer=64,
+    to_backend=identity,
 )
     sys.params isa ParametersSquare || throw(ArgumentError(
         "extract_hartree_mpo_binary_carry_square_adjacency requires ParametersSquare",
     ))
     params = sys.params
     iszero(params.U) && return zero_mpo(sys.sites)
-    density_tensors = _density_diagonal_qtt_tensors(sys.ρ, sys.sites)
+    density_tensors = _density_diagonal_qtt_tensors(
+        sys.ρ, sys.sites; to_backend=to_backend,
+    )
     field_tensors = _apply_square_neighbour_adjacency(
-        density_tensors, sys.sites; cutoff=cutoff, maxdim=maxdim,
+        density_tensors, sys.sites;
+        cutoff=cutoff, maxdim=maxdim, to_backend=to_backend,
     )
     field = _diagonal_mpo_from_qtt_tensors(
-        field_tensors, sys.sites, params; symmetrize=false,
+        field_tensors, sys.sites, params;
+        symmetrize=false, to_backend=to_backend,
     )
     return params.U * field
 end
@@ -570,19 +610,24 @@ current `-U * real(rho[i,j])` convention, and assembles the established
 Hermitian horizontal field. This is the default square SCF path; the cached
 TCI extractor remains available through `square_fock_method=:tci`.
 """
-function extract_fock_mpo_binary_carry_square_horizontal(sys::System)
+function extract_fock_mpo_binary_carry_square_horizontal(
+    sys::System;
+    to_backend=identity,
+    translations=sys.translations,
+)
     sys.params isa ParametersSquare || throw(ArgumentError(
         "extract_fock_mpo_binary_carry_square_horizontal requires ParametersSquare",
     ))
     params = sys.params
     iszero(params.U) && return zero_mpo(sys.sites)
     band_tensors = _density_neighbour_band_qtt_tensors_binary_carry_square(
-        sys.ρ, sys.sites, :right,
+        sys.ρ, sys.sites, :right; to_backend=to_backend,
     )
     coefficients = -params.U * _diagonal_mpo_from_qtt_tensors(
-        band_tensors, sys.sites, params; symmetrize=true,
+        band_tensors, sys.sites, params;
+        symmetrize=true, to_backend=to_backend,
     )
-    T_R, T_L, _, _ = sys.translations
+    T_R, T_L, _, _ = translations
     right_term = apply(coefficients, T_R;
         cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
     )
@@ -602,19 +647,24 @@ Square vertical counterpart of
 the up-directed band `rho[(x,y),(x,y+1)]` and applies the same real-exchange
 and open-boundary conventions.
 """
-function extract_fock_mpo_binary_carry_square_vertical(sys::System)
+function extract_fock_mpo_binary_carry_square_vertical(
+    sys::System;
+    to_backend=identity,
+    translations=sys.translations,
+)
     sys.params isa ParametersSquare || throw(ArgumentError(
         "extract_fock_mpo_binary_carry_square_vertical requires ParametersSquare",
     ))
     params = sys.params
     iszero(params.U) && return zero_mpo(sys.sites)
     band_tensors = _density_neighbour_band_qtt_tensors_binary_carry_square(
-        sys.ρ, sys.sites, :up,
+        sys.ρ, sys.sites, :up; to_backend=to_backend,
     )
     coefficients = -params.U * _diagonal_mpo_from_qtt_tensors(
-        band_tensors, sys.sites, params; symmetrize=true,
+        band_tensors, sys.sites, params;
+        symmetrize=true, to_backend=to_backend,
     )
-    _, _, T_U, T_D = sys.translations
+    _, _, T_U, T_D = translations
     up_term = apply(coefficients, T_U;
         cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
     )
@@ -904,24 +954,60 @@ or `:binary_carry`; it has no effect for one-dimensional systems.
 function _extract_mean_fields_with_components(
     sys::System;
     square_fock_method::Symbol=:binary_carry,
+    phase_callback::Union{Nothing,Function}=nothing,
+    phase_synchronize::Function=() -> nothing,
 )
     square_fock_method in (:tci, :binary_carry) || throw(ArgumentError(
         "square_fock_method must be :tci or :binary_carry, got $square_fock_method",
     ))
     if sys.params isa Parameters1D
-        return extract_hartree_mpo_1d(sys), extract_fock_mpo_1d(sys), nothing
+        hartree = _profiled_operation(
+            :hartree; callback=phase_callback, synchronize=phase_synchronize,
+        ) do
+            extract_hartree_mpo_binary_carry_1d(sys)
+        end
+        fock = _profiled_operation(
+            :fock; callback=phase_callback, synchronize=phase_synchronize,
+        ) do
+            extract_fock_mpo_binary_carry_1d(sys)
+        end
+        return hartree, fock, nothing
     elseif sys.params isa ParametersSquare
         if square_fock_method == :tci
-            horizontal = extract_fock_mpo_square_horizontal(sys)
-            vertical = extract_fock_mpo_square_vertical(sys)
+            horizontal = _profiled_operation(
+                :fock_horizontal; callback=phase_callback, synchronize=phase_synchronize,
+            ) do
+                extract_fock_mpo_square_horizontal(sys)
+            end
+            vertical = _profiled_operation(
+                :fock_vertical; callback=phase_callback, synchronize=phase_synchronize,
+            ) do
+                extract_fock_mpo_square_vertical(sys)
+            end
         else
-            horizontal = extract_fock_mpo_binary_carry_square_horizontal(sys)
-            vertical = extract_fock_mpo_binary_carry_square_vertical(sys)
+            horizontal = _profiled_operation(
+                :fock_horizontal; callback=phase_callback, synchronize=phase_synchronize,
+            ) do
+                extract_fock_mpo_binary_carry_square_horizontal(sys)
+            end
+            vertical = _profiled_operation(
+                :fock_vertical; callback=phase_callback, synchronize=phase_synchronize,
+            ) do
+                extract_fock_mpo_binary_carry_square_vertical(sys)
+            end
         end
-        fock = +(horizontal, vertical;
-            cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
-        )
-        hartree = extract_hartree_mpo_binary_carry_square_adjacency(sys)
+        fock = _profiled_operation(
+            :fock_sum; callback=phase_callback, synchronize=phase_synchronize,
+        ) do
+            +(horizontal, vertical;
+                cutoff=sys.params.itensors_tol, maxdim=sys.params.itensors_maxdim,
+            )
+        end
+        hartree = _profiled_operation(
+            :hartree; callback=phase_callback, synchronize=phase_synchronize,
+        ) do
+            extract_hartree_mpo_binary_carry_square_adjacency(sys)
+        end
         return hartree, fock, (horizontal=horizontal, vertical=vertical)
     end
     throw(ArgumentError("no mean-field extractor for $(typeof(sys.params))"))

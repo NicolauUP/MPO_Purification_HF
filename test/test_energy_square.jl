@@ -44,6 +44,9 @@ end
     rho = dense_matrix(sys.ρ, sys)
     h0 = dense_matrix(sys.H0, sys)
     energy = nearest_neighbor_hf_energy_square(sys)
+    energy_with_explicit_h0 = nearest_neighbor_hf_energy_square(
+        sys; hopping_hamiltonian=sys.H0,
+    )
     expected_hartree = 0.0
     expected_fock = 0.0
     for (site, neighbour, _) in square_undirected_bonds(params.L)
@@ -55,6 +58,7 @@ end
     @test isapprox(energy.fock, expected_fock; atol=1e-10)
     @test isapprox(energy.interaction, energy.hartree + energy.fock; atol=1e-10)
     @test isapprox(energy.total, energy.kinetic + energy.interaction; atol=1e-10)
+    @test energy_with_explicit_h0 == energy
 
     vh, vf = extract_mean_fields(sys)
     mean_field = dense_matrix(+(vh, vf;

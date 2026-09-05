@@ -74,6 +74,7 @@ end
 
     scf_sys = System(params)
     phase_records = NamedTuple[]
+    detail_phase_records = NamedTuple[]
     synchronization_calls = Ref(0)
     @test run_scf!(
         scf_sys, bounds...;
@@ -83,6 +84,7 @@ end
         sp2_idempotency_tolerance=1e-4,
         sp2_trace_tolerance=1e-6,
         phase_callback=record -> push!(phase_records, record),
+        detail_phase_callback=record -> push!(detail_phase_records, record),
         phase_synchronize=() -> (synchronization_calls[] += 1),
     )
     @test length(phase_records) == length(scf_diagnostics(scf_sys).history)
@@ -94,9 +96,23 @@ end
     @test all(record -> record.fields_to_device_time_s >= 0, phase_records)
     @test all(record -> record.device_diagnostics_time_s >= 0, phase_records)
     @test all(record -> record.residuals_time_s >= 0, phase_records)
+    @test all(record -> record.energy_time_s >= 0, phase_records)
     @test all(record -> record.mixing_time_s >= 0, phase_records)
     @test all(record -> record.measured_iteration_time_s >= 0, phase_records)
     @test all(record -> record.purification_iterations > 0, phase_records)
+    detail_phases = Set(record.phase for record in detail_phase_records)
+    @test :square_apply in detail_phases
+    @test :scalar_diagnostics in detail_phases
+    @test :hartree in detail_phases
+    @test :fock in detail_phases
+    @test :effective_hamiltonian in detail_phases
+    @test :commutator_Hrho in detail_phases
+    @test :commutator_rhoH in detail_phases
+    @test :commutator_difference in detail_phases
+    @test :vh_residual in detail_phases
+    @test :vf_residual in detail_phases
+    @test :rho_residual in detail_phases
+    @test all(record -> record.elapsed_time_s >= 0, detail_phase_records)
     @test opnorm(dense_matrix(scf_sys.ρ, scf_sys) - exact) < 2e-3
     returned_hamiltonian = dense_matrix(scf_sys.H0, scf_sys) +
         dense_matrix(scf_sys.VH, scf_sys) + dense_matrix(scf_sys.VF, scf_sys)

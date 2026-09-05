@@ -81,6 +81,76 @@ function diagonal_mpo_from_function(
     end
 end
 
+"""
+    diagonal_mpo_from_cosine_hopping(hopping, sites)
+
+Construct the exact real QTT-MPO for a `CosineHopping` coefficient. With the
+most-significant-bit-first convention, every binary digit adds either zero or
+`frequency * 2^(L-position)` to the phase. A three-state affine rotation
+automaton carries the constant, cosine, and sine channels, so the bond
+dimension never exceeds three and no TCI samples are required.
+"""
+function diagonal_mpo_from_cosine_hopping(
+    hopping::CosineHopping,
+    sites::Vector{<:Index},
+)
+    L = length(sites)
+    L > 0 || throw(ArgumentError("at least one QTT site is required"))
+
+    local_rotation(position::Int, bit::Int) = begin
+        bit == 0 && return [1.0 0.0 0.0; 0.0 1.0 0.0; 0.0 0.0 1.0]
+        theta = hopping.frequency * 2.0^(L - position)
+        return [
+            1.0 0.0 0.0
+            0.0 cos(theta) sin(theta)
+            0.0 -sin(theta) cos(theta)
+        ]
+    end
+
+    initial = [1.0, cos(hopping.phase), sin(hopping.phase)]
+    final = [hopping.offset, hopping.amplitude, 0.0]
+    tensors = Vector{ITensor}(undef, L)
+
+    if L == 1
+        coefficient = zeros(Float64, 2)
+        for bit in 0:1
+            coefficient[bit + 1] = dot(initial, local_rotation(1, bit) * final)
+        end
+        tensors[1] = ITensor(coefficient, sites[1])
+    else
+        links = [Index(3, "CosineHoppingQTT,link=$link") for link in 1:(L - 1)]
+
+        first = zeros(Float64, 3, 2)
+        for bit in 0:1
+            first[:, bit + 1] = vec(transpose(initial) * local_rotation(1, bit))
+        end
+        tensors[1] = ITensor(first, links[1], sites[1])
+
+        for position in 2:(L - 1)
+            core = zeros(Float64, 3, 3, 2)
+            for bit in 0:1
+                core[:, :, bit + 1] = local_rotation(position, bit)
+            end
+            tensors[position] = ITensor(core, links[position - 1], links[position], sites[position])
+        end
+
+        last = zeros(Float64, 3, 2)
+        for bit in 0:1
+            last[:, bit + 1] = local_rotation(L, bit) * final
+        end
+        tensors[L] = ITensor(last, links[L - 1], sites[L])
+    end
+
+    coefficient_mps = MPS(tensors)
+    coefficient_mpo = MPO(L)
+    for position in 1:L
+        coefficient_mpo.data[position] = Quantics._asdiagonal(
+            coefficient_mps.data[position], sites[position],
+        )
+    end
+    return coefficient_mpo
+end
+
 function safe_relative_change(diff_norm::Real, reference_norm::Real; floor::Real=sqrt(eps(Float64)))
     diff_norm >= 0 || throw(ArgumentError("diff_norm must be nonnegative"))
     reference_norm >= 0 || throw(ArgumentError("reference_norm must be nonnegative"))

@@ -24,6 +24,9 @@ function perform_purification(
     gc_period::Integer=10,
     gc_threshold_bytes::Integer=1 << 30,
     device_cleanup::Function=() -> nothing,
+    phase_callback::Union{Nothing,Function}=nothing,
+    phase_synchronize::Function=() -> nothing,
+    sp2_snapshot_callback::Union{Nothing,Function}=nothing,
 )
     if method == :sp2
         return perform_purification_sp2(
@@ -35,6 +38,9 @@ function perform_purification(
             trace_tolerance=sp2_trace_tolerance,
             spectral_bounds=spectral_bounds,
             spectral_bounds_validation=spectral_bounds_validation,
+            phase_callback=phase_callback,
+            phase_synchronize=phase_synchronize,
+            snapshot_callback=sp2_snapshot_callback,
         )
     elseif method == :mcweeny_mu
         return perform_purification_mcweeny_mu(rho0, params;

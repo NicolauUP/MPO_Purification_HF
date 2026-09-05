@@ -89,6 +89,11 @@ end
     @test !MPO_MeanField._scf_has_stable_history([stable], tolerance; required_iterations=2)
     @test MPO_MeanField._scf_has_stable_history([stable, stable], tolerance; required_iterations=2)
     @test !MPO_MeanField._scf_has_stable_history([stable, unstable], tolerance; required_iterations=2)
+    commutator_limited = record(rho_residual=8e-4, commutator_residual=2e-3)
+    @test !MPO_MeanField._scf_record_within_tolerance(commutator_limited, tolerance)
+    @test MPO_MeanField._scf_record_within_tolerance(
+        commutator_limited, tolerance; require_stationarity=false,
+    )
     @test_throws ArgumentError MPO_MeanField._scf_has_stable_history([stable], tolerance; required_iterations=0)
 
     two_cycle = record(rho_residual=2e-3, two_cycle_residual=5e-4)

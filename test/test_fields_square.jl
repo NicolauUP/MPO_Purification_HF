@@ -92,6 +92,25 @@
     end
 end
 
+@testset "backend-preserving square binary-carry construction" begin
+    params = parameters_square(L=4, U=0.7, S=nothing, itensors_tol=1e-12)
+    sys = System(params)
+    sys.ρ = construct_rho_0(sys, params, -5.0, 5.0; method=:sp2)
+
+    # `copy` selects the backend-preserving delta construction without
+    # changing storage. This provides a deterministic CPU regression for the
+    # code path used with `adapt(CuArray, ...)` in the CUDA benchmark.
+    for extractor in (
+        extract_hartree_mpo_binary_carry_square_adjacency,
+        extract_fock_mpo_binary_carry_square_horizontal,
+        extract_fock_mpo_binary_carry_square_vertical,
+    )
+        established = extractor(sys)
+        backend_preserving = extractor(sys; to_backend=copy)
+        @test dense_matrix(backend_preserving, sys) ≈ dense_matrix(established, sys) atol=1e-11
+    end
+end
+
 @testset "P1.2b square adjacency Hartree with exact checkerboard density" begin
     params = parameters_square(L=4, U=0.7, S=nothing, itensors_tol=1e-12)
     sys = System(params)

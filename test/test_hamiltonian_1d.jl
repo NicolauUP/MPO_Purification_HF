@@ -63,4 +63,22 @@ end
             rtol=1e-10,
         )
     end
+
+    # The analytic cosine path must agree coefficient-for-coefficient with
+    # the established generic function/TCI construction, while avoiding any
+    # interpolation search. This also verifies the bond-index convention:
+    # t(i) weights the open-chain bond i -> i+1.
+    for L in 1:5
+        N = 2^L
+        cosine = CosineHopping(-1.0, -0.6, 0.73, 0.37)
+        analytic_system = System(parameters_1d(L=L, t=cosine, U=0.0))
+        tci_system = System(parameters_1d(L=L, t=x -> cosine(x), U=0.0))
+        analytic_dense = dense_matrix(analytic_system.H0, analytic_system)
+        tci_dense = dense_matrix(tci_system.H0, tci_system)
+        reference = dense_open_chain_reference(N, cosine)
+
+        @test isapprox(analytic_dense, reference; atol=2e-12, rtol=2e-12)
+        @test isapprox(analytic_dense, tci_dense; atol=2e-10, rtol=2e-10)
+        @test isapprox(analytic_dense, analytic_dense'; atol=1e-12, rtol=1e-12)
+    end
 end

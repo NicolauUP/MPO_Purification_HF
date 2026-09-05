@@ -19,7 +19,10 @@ The present Fock implementation uses `real(rho[i,i+1])`; this routine follows
 that implemented real-density functional. It is therefore not an energy
 functional for a complex exchange implementation.
 """
-function nearest_neighbor_hf_energy_1d(sys::System)
+function nearest_neighbor_hf_energy_1d(
+    sys::System;
+    hopping_hamiltonian::MPO=sys.H0,
+)
     sys.params isa Parameters1D || throw(ArgumentError(
         "nearest-neighbor HF energy is currently implemented only for Parameters1D",
     ))
@@ -41,7 +44,7 @@ function nearest_neighbor_hf_energy_1d(sys::System)
 
     hartree = params.U * sum(density[i] * density[i + 1] for i in 1:(N - 1))
     fock = -params.U * sum(abs2(bond_order[i]) for i in 1:(N - 1))
-    H0rho = apply(sys.H0, sys.ρ;
+    H0rho = apply(hopping_hamiltonian, sys.ρ;
         cutoff=params.itensors_tol,
         maxdim=params.itensors_maxdim,
     )
@@ -74,7 +77,10 @@ both hopping directions and the external potential `W`. The Fock contribution
 follows the presently implemented real-exchange convention and is not an
 energy functional for a complex exchange field.
 """
-function nearest_neighbor_hf_energy_square(sys::System)
+function nearest_neighbor_hf_energy_square(
+    sys::System;
+    hopping_hamiltonian::MPO=sys.H0,
+)
     sys.params isa ParametersSquare || throw(ArgumentError(
         "square nearest-neighbor HF energy requires ParametersSquare",
     ))
@@ -97,7 +103,7 @@ function nearest_neighbor_hf_energy_square(sys::System)
         hartree += params.U * density[site] * density[neighbour]
         fock -= params.U * abs2(bond_order)
     end
-    H0rho = apply(sys.H0, sys.ρ;
+    H0rho = apply(hopping_hamiltonian, sys.ρ;
         cutoff=params.itensors_tol,
         maxdim=params.itensors_maxdim,
     )
@@ -131,7 +137,7 @@ the same units as `t`, `U`, and `W`. The energy component follows the current
 real-exchange field implementation; see [`nearest_neighbor_hf_energy_1d`](@ref)
 for that limitation.
 """
-function observables_1d(sys::System)
+function observables_1d(sys::System; measure_stationarity::Bool=true)
     sys.params isa Parameters1D || throw(ArgumentError(
         "1D observables are currently implemented only for Parameters1D",
     ))
@@ -162,7 +168,8 @@ function observables_1d(sys::System)
         energy=nearest_neighbor_hf_energy_1d(sys),
         hermiticity_residual=_relative_mpo_residual(sys.ρ, ITensors.dag(sys.ρ), params),
         idempotency_residual=idempotency_residual(sys.ρ, rho_squared),
-        stationarity_residual=_scf_commutator_residual(H_effective, sys.ρ, params),
+        stationarity_residual=measure_stationarity ?
+            _scf_commutator_residual(H_effective, sys.ρ, params) : NaN,
     )
 end
 
@@ -175,7 +182,7 @@ pairs; their respective complex bond-order vectors have the same ordering.
 Together with `site_density`, `particle_number`, `energy`, and the three
 residuals, these use the same physical conventions as [`observables_1d`](@ref).
 """
-function observables_square(sys::System)
+function observables_square(sys::System; measure_stationarity::Bool=true)
     sys.params isa ParametersSquare || throw(ArgumentError(
         "square observables require ParametersSquare",
     ))
@@ -221,7 +228,8 @@ function observables_square(sys::System)
         energy=nearest_neighbor_hf_energy_square(sys),
         hermiticity_residual=_relative_mpo_residual(sys.ρ, ITensors.dag(sys.ρ), params),
         idempotency_residual=idempotency_residual(sys.ρ, rho_squared),
-        stationarity_residual=_scf_commutator_residual(H_effective, sys.ρ, params),
+        stationarity_residual=measure_stationarity ?
+            _scf_commutator_residual(H_effective, sys.ρ, params) : NaN,
     )
 end
 
@@ -230,11 +238,11 @@ end
 
 Return the geometry-appropriate observable result for a 1D or square system.
 """
-function observables(sys::System)
+function observables(sys::System; measure_stationarity::Bool=true)
     if sys.params isa Parameters1D
-        return observables_1d(sys)
+        return observables_1d(sys; measure_stationarity=measure_stationarity)
     elseif sys.params isa ParametersSquare
-        return observables_square(sys)
+        return observables_square(sys; measure_stationarity=measure_stationarity)
     end
     throw(ArgumentError("observables are not implemented for $(typeof(sys.params))"))
 end

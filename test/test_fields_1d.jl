@@ -69,3 +69,61 @@
     @test opnorm(complex_carry_fock - expected_vf) < 1e-10
     @test opnorm(complex_carry_fock - complex_carry_fock') < 1e-12
 end
+
+@testset "M4.2 1D binary-carry fields with SP2 projector" begin
+    # Validate the public 1D field route on a genuinely purified density, not
+    # only on a hand-built MPO. The staggered potential supplies a small gap.
+    params = parameters_1d(
+        L=2,
+        t=-1.0,
+        U=0.7,
+        W=x -> iseven(Int(x)) ? 0.8 : -0.8,
+        S=nothing,
+        itensors_maxdim=64,
+        purification_steps=40,
+    )
+    sys = System(params)
+    bounds = (-3.0, 3.0)
+    purified = perform_purification(
+        construct_rho_0(sys, params, bounds...; method=:sp2),
+        params;
+        method=:sp2,
+        verbose=0,
+        spectral_bounds=bounds,
+        sp2_idempotency_tolerance=2e-4,
+        sp2_trace_tolerance=4e-6,
+    )
+    @test purified.converged
+    sys.ρ = purified.rho
+
+    legacy_hartree = extract_hartree_mpo_1d(sys)
+    legacy_fock = extract_fock_mpo_1d(sys)
+    carry_hartree, carry_fock = extract_mean_fields(sys)
+    N = 1 << params.L
+    for site in 1:N
+        direct_hartree = params.U * sum(
+            real(MatrixChecker(
+                sys.ρ, sys.sites, neighbour, neighbour, sys.bra_states, sys.ket_states,
+            ))
+            for neighbour in (site - 1, site + 1)
+            if 1 <= neighbour <= N
+        )
+        for field in (legacy_hartree, carry_hartree)
+            observed = real(MatrixChecker(
+                field, sys.sites, site, site, sys.bra_states, sys.ket_states,
+            ))
+            @test isapprox(observed, direct_hartree; atol=1e-10, rtol=1e-10)
+        end
+    end
+    for site in 1:(N - 1)
+        direct_fock = -params.U * real(MatrixChecker(
+            sys.ρ, sys.sites, site, site + 1, sys.bra_states, sys.ket_states,
+        ))
+        for field in (legacy_fock, carry_fock)
+            observed = real(MatrixChecker(
+                field, sys.sites, site, site + 1, sys.bra_states, sys.ket_states,
+            ))
+            @test isapprox(observed, direct_fock; atol=1e-10, rtol=1e-10)
+        end
+    end
+end

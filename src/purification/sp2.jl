@@ -35,6 +35,9 @@ function perform_purification_sp2(
     trace_tolerance::Union{Nothing,Real}=nothing,
     spectral_bounds::Union{Nothing,Tuple{Float64,Float64}}=nothing,
     spectral_bounds_validation::Symbol=:not_provided,
+    phase_callback::Union{Nothing,Function}=nothing,
+    phase_synchronize::Function=() -> nothing,
+    snapshot_callback::Union{Nothing,Function}=nothing,
 )
     !isnothing(spectral_bounds) || throw(ArgumentError(
         "SP2 requires explicit enclosing spectral_bounds",
@@ -70,9 +73,16 @@ function perform_purification_sp2(
     bond_dimensions = NTuple{3,Int}[]
 
     for iteration in 1:params.purification_steps
-        rho_squared = apply(rho, rho;
-            cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
-        )
+        rho_squared = _profiled_operation(
+            :square_apply;
+            callback=phase_callback,
+            synchronize=phase_synchronize,
+            metadata=(iteration=iteration,),
+        ) do
+            apply(rho, rho;
+                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+            )
+        end
         max_bond_dimension = max(max_bond_dimension, maxlinkdim(rho), maxlinkdim(rho_squared))
         bond_dimension_sum += maxlinkdim(rho) + maxlinkdim(rho_squared)
         bond_dimension_samples += 2
@@ -81,10 +91,19 @@ function perform_purification_sp2(
             iteration, 0, max_bond_dimension, bond_dimension_sum / bond_dimension_samples,
             copy(bond_dimensions),
         )
-        trace_value = real(tr(rho))
-        trace_squared = real(tr(rho_squared))
-        idem = idempotency_residual(rho, rho_squared)
-        herm = _relative_mpo_residual(rho, ITensors.dag(rho), params)
+        trace_value, trace_squared, idem, herm = _profiled_operation(
+            :scalar_diagnostics;
+            callback=phase_callback,
+            synchronize=phase_synchronize,
+            metadata=(iteration=iteration,),
+        ) do
+            (
+                real(tr(rho)),
+                real(tr(rho_squared)),
+                idempotency_residual(rho, rho_squared),
+                _relative_mpo_residual(rho, ITensors.dag(rho), params),
+            )
+        end
         convergence_score = max(
             abs(trace_value - Ne) / convergence_trace_tolerance,
             idem / idempotency_tolerance,
@@ -155,10 +174,25 @@ function perform_purification_sp2(
         if branch == :square
             rho = rho_squared
         else
-            rho = +(2.0 * rho, -rho_squared;
-                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
-            )
+            rho = _profiled_operation(
+                :hole_update;
+                callback=phase_callback,
+                synchronize=phase_synchronize,
+                metadata=(iteration=iteration,),
+            ) do
+                +(2.0 * rho, -rho_squared;
+                    cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+                )
+            end
         end
+        # This optional hook is deliberately invoked only after SP2 has selected
+        # its next iterate. It is useful for reproducing one subsequent square
+        # in a diagnostic; normal purification behavior is unchanged.
+        !isnothing(snapshot_callback) && snapshot_callback((
+            iteration=iteration,
+            branch=branch,
+            rho=rho,
+        ))
     end
 
     verbose > 0 && finish_iteration_progress(io, overwrite_progress)

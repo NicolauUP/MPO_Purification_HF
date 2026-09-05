@@ -129,15 +129,32 @@ function validate_parameters(params::ParametersSquare)
 end
 
 
-function System(params::AbstractModelParameters)
+function System(
+    params::AbstractModelParameters;
+    static_to_backend=identity,
+    static_phase_callback::Union{Nothing,Function}=nothing,
+    static_phase_synchronize::Function=() -> nothing,
+)
     validate_parameters(params)
     sites = ITensors.siteinds("Qubit", params.L)
     
 
-    translations = params isa Parameters1D ?
-        build_translation_chain(sites) : build_translation_square(sites)
-    H_static = build_H0(sites, params; translations=translations)
-    VH_init = build_seed(sites, params)
+    translations = _construction_phase(
+        static_phase_callback, static_phase_synchronize, :translation_mpos,
+        () -> params isa Parameters1D ?
+            build_translation_chain(sites) : build_translation_square(sites),
+    )
+    H_static = build_H0(
+        sites, params;
+        translations=translations,
+        to_backend=static_to_backend,
+        phase_callback=static_phase_callback,
+        phase_synchronize=static_phase_synchronize,
+    )
+    VH_init = _construction_phase(
+        static_phase_callback, static_phase_synchronize, :seed_mpo,
+        () -> build_seed(sites, params),
+    )
     VF_init = Identity_MPO(sites) * 0.0 # We start with no Fock potential, but we could also build a seed for it.
     rho_init = Identity_MPO(sites) * 0.0 #nothing
     bra, ket = precompute_qtt_states(sites)

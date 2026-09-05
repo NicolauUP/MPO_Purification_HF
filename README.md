@@ -12,6 +12,14 @@ black-box production electronic-structure code: spectral bounds, MPO
 truncation, convergence diagnostics, and sensitivity to initial seeds need
 to be checked for every calculation.
 
+## Documentation map
+
+For a fresh calculation or handoff, start with
+[`docs/START_HERE.md`](docs/START_HERE.md). It links the maintained public
+workflow, scientific conventions, MN5 runbook, validation matrix, and current
+research status. Campaign-specific READMEs remain the authority for their
+particular model and numerical parameters.
+
 ## What is implemented
 
 - Open one-dimensional chains with \(N=2^L\) sites.
@@ -83,10 +91,12 @@ Load it with:
 using MPO_MeanField
 ```
 
-The maintained solver workflow is CPU-first. CUDA remains in the project
-environment for planned GPU work, but the current core package does not load a
-graphics backend. A networked machine is normally required for the first
-`Pkg.instantiate()`.
+The package supports an explicit CUDA runtime through `RuntimeSettings` and
+the public campaign CLI. MPO CUDA is currently hybrid: purification can use
+the GPU while Hartree/Fock extraction remains host-side. KPM CUDA workflows
+are separate, more device-oriented solver paths. Run public `preflight` on an
+allocated GPU node to see the active path. A networked machine is normally
+required for the first `Pkg.instantiate()`.
 
 ### Offline HPC environment
 
@@ -310,9 +320,9 @@ per-method timing and allocation data.
 - Exact spectral-bound validation is a small-system diagnostic, not a scalable
   bound estimator. Production calculations need conservative externally
   justified bounds.
-- GPU movement hooks exist in `run_scf!`, but the maintained validation and
-  benchmark workflow is CPU-first. Treat GPU use as experimental until it has
-  its own validation run.
+- CUDA KPM has dedicated dense-reference and resolution-audit workflows. The
+  MPO CUDA path remains hybrid and needs a method-specific validation run for
+  each new regime; it is not yet an end-to-end device mean-field solver.
 
 ## Repository map
 

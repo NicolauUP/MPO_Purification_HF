@@ -109,7 +109,29 @@ end
 
 
 
-function build_H0(sites, params::Parameters1D; translations=nothing)
+function _construction_phase(
+    callback::Union{Nothing,Function},
+    synchronize::Function,
+    name::Symbol,
+    operation::Function,
+)
+    isnothing(callback) && return operation()
+    synchronize()
+    started = time_ns()
+    value = operation()
+    synchronize()
+    callback((phase=name, elapsed_time_s=(time_ns() - started) / 1e9))
+    return value
+end
+
+function build_H0(
+    sites,
+    params::Parameters1D;
+    translations=nothing,
+    to_backend=identity,
+    phase_callback::Union{Nothing,Function}=nothing,
+    phase_synchronize::Function=() -> nothing,
+)
     T_R, T_L = isnothing(translations) ? build_translation_chain(sites) : translations
  
 
@@ -117,25 +139,77 @@ function build_H0(sites, params::Parameters1D; translations=nothing)
     if params.t isa Number
         println("Using constant hopping t = $(params.t)")
 
-        H0 = params.t * (T_R + T_L)
+        T_R_work, T_L_work = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_transfer,
+            () -> (to_backend(T_R), to_backend(T_L)),
+        )
+        H0 = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_sum,
+            () -> params.t * (T_R_work + T_L_work),
+        )
+
+    elseif params.t isa CosineHopping
+
+        T_MPO = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_diagonal_exact_qtt,
+            () -> diagonal_mpo_from_cosine_hopping(params.t, sites),
+        )
+        T_MPO_work, T_R_work, T_L_work = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_transfer,
+            () -> (to_backend(T_MPO), to_backend(T_R), to_backend(T_L)),
+        )
+
+        H_T_R = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_right_apply,
+            () -> apply(T_MPO_work, T_R_work; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H_T_L = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_left_apply,
+            () -> apply(T_L_work, ITensors.dag(T_MPO_work); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H0 = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_sum,
+            () -> +(H_T_R, H_T_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
 
     elseif params.t isa Function
 
-        T_MPO = diagonal_mpo_from_function(params.t, Float64, sites, params.tci_tol)
+        T_MPO = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_diagonal_tci,
+            () -> diagonal_mpo_from_function(params.t, Float64, sites, params.tci_tol),
+        )
+        T_MPO_work, T_R_work, T_L_work = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_transfer,
+            () -> (to_backend(T_MPO), to_backend(T_R), to_backend(T_L)),
+        )
 
-        H_T_R = apply(T_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H_T_L = apply(T_L, ITensors.dag(T_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H0 = +(H_T_R, H_T_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        H_T_R = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_right_apply,
+            () -> apply(T_MPO_work, T_R_work; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H_T_L = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_left_apply,
+            () -> apply(T_L_work, ITensors.dag(T_MPO_work); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H0 = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_sum,
+            () -> +(H_T_R, H_T_L; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
         
     end
 
 
     if !isnothing(params.W)
         W_MPO = build_W(sites, params)
+        # Keep the static onsite field on the same tensor backend as the
+        # hopping Hamiltonian before adding the two MPOs. Without this
+        # conversion, CUDA runs attempt a broadcast between CuArray and
+        # host Matrix storage when an external potential is present.
+        W_work = to_backend(W_MPO)
         if isnothing(H0)
-            H0 = W_MPO
+            H0 = W_work
         else
-            H0 = +(H0, W_MPO; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+            H0 = +(H0, W_work; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         end
     end
     return H0
@@ -143,7 +217,14 @@ end
 
 
 
-function build_H0(sites, params::ParametersSquare; translations=nothing)
+function build_H0(
+    sites,
+    params::ParametersSquare;
+    translations=nothing,
+    to_backend=identity,
+    phase_callback::Union{Nothing,Function}=nothing,
+    phase_synchronize::Function=() -> nothing,
+)
     println("Building 2D Hamiltonian MPO...")
     T_R, T_L, T_U, T_D = isnothing(translations) ? build_translation_square(sites) : translations
  
@@ -154,7 +235,18 @@ function build_H0(sites, params::ParametersSquare; translations=nothing)
     if params.t[1] isa Number && params.t[2] isa Number 
         println("Using constant hopping tx = $(params.t[1]) and ty = $(params.t[2])")
 
-        H0 = +(params.t[1] * (T_R + T_L), params.t[2] * (T_U + T_D); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        T_R_work, T_L_work, T_U_work, T_D_work = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_transfer,
+            () -> (to_backend(T_R), to_backend(T_L), to_backend(T_U), to_backend(T_D)),
+        )
+        H0 = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_sum,
+            () -> +(
+                params.t[1] * (T_R_work + T_L_work),
+                params.t[2] * (T_U_work + T_D_work);
+                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
+            ),
+        )
 
         # H0 = +(H0, ty * (T_U + T_D); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
     
@@ -168,15 +260,44 @@ function build_H0(sites, params::ParametersSquare; translations=nothing)
             x,y = square_lattice_decoder(Int(z), total_bits)
             return params.t[2] isa Number ? params.t[2] : params.t[2](x, y)
         end
-        Tx_MPO = diagonal_mpo_from_function(tx_1d, Float64, sites, params.tci_tol)
-        Ty_MPO = diagonal_mpo_from_function(ty_1d, Float64, sites, params.tci_tol)
+        Tx_MPO = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_x_diagonal_tci,
+            () -> diagonal_mpo_from_function(tx_1d, Float64, sites, params.tci_tol),
+        )
+        Ty_MPO = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_y_diagonal_tci,
+            () -> diagonal_mpo_from_function(ty_1d, Float64, sites, params.tci_tol),
+        )
+        Tx_work, Ty_work, T_R_work, T_L_work, T_U_work, T_D_work = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_transfer,
+            () -> (
+                to_backend(Tx_MPO), to_backend(Ty_MPO), to_backend(T_R), to_backend(T_L),
+                to_backend(T_U), to_backend(T_D),
+            ),
+        )
 
-        H_T_R = apply(Tx_MPO, T_R; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H_T_L = apply(T_L, ITensors.dag(Tx_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H_T_U = apply(Ty_MPO, T_U; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
-        H_T_D = apply(T_D, ITensors.dag(Ty_MPO); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        H_T_R = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_right_apply,
+            () -> apply(Tx_work, T_R_work; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H_T_L = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_left_apply,
+            () -> apply(T_L_work, ITensors.dag(Tx_work); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H_T_U = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_up_apply,
+            () -> apply(Ty_work, T_U_work; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
+        H_T_D = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_down_apply,
+            () -> apply(T_D_work, ITensors.dag(Ty_work); cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
 
-      H0 = +(H_T_R, H_T_L, H_T_U, H_T_D; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+        H0 = _construction_phase(
+            phase_callback, phase_synchronize, :static_hopping_sum,
+            () -> +(H_T_R, H_T_L, H_T_U, H_T_D;
+                cutoff=params.itensors_tol, maxdim=params.itensors_maxdim),
+        )
 
     end
         
@@ -184,10 +305,13 @@ function build_H0(sites, params::ParametersSquare; translations=nothing)
 
     if !isnothing(params.W)
         W_MPO = build_W(sites, params)
+        # The hopping terms have already been adapted with `to_backend`; the
+        # substrate MPO must be adapted as well before the static sum.
+        W_work = to_backend(W_MPO)
         if isnothing(H0)
-            H0 = W_MPO
+            H0 = W_work
         else
-            H0 = +(H0, W_MPO; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
+            H0 = +(H0, W_work; cutoff=params.itensors_tol, maxdim=params.itensors_maxdim)
         end
     end
     return H0
