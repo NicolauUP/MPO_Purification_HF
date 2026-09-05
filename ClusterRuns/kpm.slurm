@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=kpm_scf
 #SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=20
 #SBATCH --time=04:00:00
-#SBATCH --mem=64G
+#SBATCH --account=epor78
+#SBATCH --qos=acc_ehpc
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
@@ -14,6 +16,8 @@ set -euo pipefail
 : "${BACKEND:=cuda}"
 
 mkdir -p logs "$OUTPUT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export REPOSITORY_ROOT="${REPOSITORY_ROOT:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
 [ -f runs/common/slurm_cuda_runtime.sh ] && source runs/common/slurm_cuda_runtime.sh
 
 case "$GEOMETRY" in

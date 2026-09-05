@@ -3,8 +3,10 @@
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=20
 #SBATCH --time=01:00:00
-#SBATCH --mem=32G
+#SBATCH --account=epor78
+#SBATCH --qos=acc_ehpc
 
 set -euo pipefail
 

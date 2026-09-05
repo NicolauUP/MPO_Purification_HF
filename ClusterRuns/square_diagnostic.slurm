@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 #SBATCH --job-name=square_diag
 #SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=20
 #SBATCH --time=01:00:00
-#SBATCH --mem=32G
+#SBATCH --account=epor78
+#SBATCH --qos=acc_ehpc
 #SBATCH --output=logs/%x_%j.out
 #SBATCH --error=logs/%x_%j.err
 
@@ -25,6 +27,8 @@ set -euo pipefail
 : "${CUTOFFS:=1e-14,1e-12,1e-10,1e-8,1e-6}"
 
 mkdir -p logs "$OUTPUT_DIR"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export REPOSITORY_ROOT="${REPOSITORY_ROOT:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
 [ -f runs/common/slurm_cuda_runtime.sh ] && source runs/common/slurm_cuda_runtime.sh
 
 case "$TASK" in
