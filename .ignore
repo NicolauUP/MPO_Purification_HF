@@ -1,0 +1,13 @@
+cluster_depot/
+cluster_depot_new.tar.gz
+compiled/
+output/
+tmp/
+logs/
+*.tar.gz
+*.h5
+*.csv
+*.png
+*.svg
+*.log
+*.log.gz

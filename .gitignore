@@ -9,3 +9,18 @@ LocalPreferences.toml
 # Local/container dependency depots and exported images are transfer artefacts.
 cluster_depot/
 *.tar.gz
+notebooks/plot_2d_campaign_density.ipynb
+cluster_depot/
+cluster_depot_new.tar.gz
+compiled/
+output/
+tmp/
+logs/
+*.tar.gz
+*.h5
+*.csv
+*.png
+*.svg
+*.log
+*.log.gz
+.DS_Store
