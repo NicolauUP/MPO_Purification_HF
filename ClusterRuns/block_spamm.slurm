@@ -8,14 +8,20 @@
 
 set -euo pipefail
 
-: "${N:=1024}"
+: "${TASK:=scf}" # options: diagnostic, smoke, sp2, scf
+if [[ "$TASK" == "smoke" ]]; then
+  : "${N:=64}"
+  : "${SP2_STEPS:=1}"
+else
+  : "${N:=1024}"
+  : "${SP2_STEPS:=20}"
+fi
 : "${BLOCK_SIZE:=16}"
 : "${V2:=0.5}"
-: "${SP2_STEPS:=20}"
-: "${TASK:=scf}" # options: diagnostic, sp2, scf
 : "${OUTPUT_DIR:=results/block_spamm_${SLURM_JOB_ID:-manual}}"
 
-REPOSITORY_ROOT="${SLURM_SUBMIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export REPOSITORY_ROOT="${REPOSITORY_ROOT:-"$(cd "${SCRIPT_DIR}/.." && pwd)"}"
 cd "$REPOSITORY_ROOT"
 mkdir -p logs "$OUTPUT_DIR"
 RUN_OUTPUT="$OUTPUT_DIR/$TASK"
@@ -25,7 +31,7 @@ module load nvidia-hpc-sdk/24.11
 source "$REPOSITORY_ROOT/runs/common/slurm_cuda_runtime.sh"
 
 case "$TASK" in
-  diagnostic)
+  diagnostic|smoke)
     julia "${JULIA_CUDA_ARGS[@]}" \
       benchmark/sparse_sp2_gpu/diagnose_block_spamm_gpu_frontend.jl \
       "$RUN_OUTPUT" "$N" "$BLOCK_SIZE" "$V2" "$SP2_STEPS"
@@ -44,7 +50,7 @@ case "$TASK" in
       "$RUN_OUTPUT" "$N" "$V2"
     ;;
   *)
-    echo "invalid TASK=$TASK; expected diagnostic, sp2, or scf" >&2
+    echo "invalid TASK=$TASK; expected diagnostic, smoke, sp2, or scf" >&2
     exit 2
     ;;
 esac
