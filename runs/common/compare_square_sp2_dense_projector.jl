@@ -64,7 +64,8 @@ if backend == :cuda
     CUDA.functional() || error("CUDA is not functional on this node")
 end
 
-to_device = backend == :cuda ? CUDA.cu : identity
+to_device = backend == :cuda ?
+    (value -> ITensors.adapt(CUDA.CuArray, value)) : identity
 to_host = backend == :cuda ? ITensors.cpu : identity
 synchronize_backend() = backend == :cuda ? CUDA.synchronize() : nothing
 device_name = backend == :cuda ? CUDA.name(CUDA.device()) : "CPU"
@@ -198,6 +199,10 @@ rho0_calculation = backend_timed() do
     )
 end
 rho0 = rho0_calculation.value
+device_scalar_type = ITensors.scalartype(rho0)
+backend == :cuda && device_scalar_type != Float64 && error(
+    "CUDA SP2 comparison requires Float64 MPO tensors, got $device_scalar_type",
+)
 purification = backend_timed() do
     open(joinpath(output, "sp2_progress.txt"), "w") do progress
         perform_purification(
@@ -285,6 +290,7 @@ open(joinpath(output, "summary.toml"), "w") do io
         "itensors_maxdim" => params.itensors_maxdim,
         "backend" => string(backend),
         "device_name" => device_name,
+        "device_scalar_type" => string(device_scalar_type),
         "device_total_memory_bytes" => device_total_memory,
         "device_free_memory_before_bytes" => device_free_memory_before,
         "device_free_memory_after_bytes" => device_free_memory_after,

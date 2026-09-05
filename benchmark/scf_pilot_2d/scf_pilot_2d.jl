@@ -419,7 +419,8 @@ function run_pilot(config)
             error("CUDA backend must be selected with the command-line option --backend cuda")
         CUDA_BACKEND.functional() || error("CUDA is not functional on this node")
     end
-    to_device = config.backend == :cuda ? CUDA_BACKEND.cu : identity
+    to_device = config.backend == :cuda ?
+        (value -> ITensors.adapt(CUDA_BACKEND.CuArray, value)) : identity
     to_host = config.backend == :cuda ? ITensors.cpu : identity
     synchronize_backend = config.backend == :cuda ? CUDA_BACKEND.synchronize : (() -> nothing)
     gpu_total_memory = config.backend == :cuda ? CUDA_BACKEND.total_memory() : 0

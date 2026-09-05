@@ -6,6 +6,10 @@ This constructs exactly the initial Hamiltonian used by SCF iteration one,
 H0 + S, then runs the production SP2 recurrence without entering SCF or
 extracting Hartree/Fock fields. Each `iterations.csv` row is one actual SP2
 step before its selected polynomial is applied.
+
+Set `MPO_FIXED_SP2_CHECKPOINT` to an unused path to also write the final
+host-side MPO state. Such a checkpoint represents a fixed initial-field SP2
+projector, *not* a self-consistent HF solution.
 """
 
 using Dates
@@ -15,14 +19,16 @@ using MPO_MeanField
 using SHA
 using TOML
 
-length(ARGS) in (4, 6) || error("usage: diagnose_square_sp2_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY [SPECTRAL_LOWER SPECTRAL_UPPER]")
+length(ARGS) in (4, 5, 6, 7) || error("usage: diagnose_square_sp2_fixed_hamiltonian.jl CAMPAIGN_FILE TASK_INDEX MAXDIM OUTPUT_DIRECTORY [BACKEND] [SPECTRAL_LOWER SPECTRAL_UPPER]")
 campaign_file = abspath(ARGS[1])
 task_index = tryparse(Int, ARGS[2])
 maxdim = tryparse(Int, ARGS[3])
 output = abspath(ARGS[4])
+backend = length(ARGS) in (5, 7) ? Symbol(lowercase(ARGS[5])) : :cpu
 isnothing(task_index) && error("TASK_INDEX must be an integer")
 isnothing(maxdim) && error("MAXDIM must be an integer")
 maxdim > 0 || error("MAXDIM must be positive")
+backend in (:cpu, :cuda) || error("BACKEND must be cpu or cuda")
 isfile(campaign_file) || error("campaign file does not exist: $campaign_file")
 include(campaign_file)
 @isdefined(campaign) || error("campaign file must define `campaign`")
@@ -54,15 +60,36 @@ end
 
 params = with_maxdim(spec.params, maxdim)
 campaign_bounds = (Float64(spec.spectral_bounds[1]), Float64(spec.spectral_bounds[2]))
-bounds = if length(ARGS) == 6
-    lower = tryparse(Float64, ARGS[5])
-    upper = tryparse(Float64, ARGS[6])
+bounds = if length(ARGS) in (6, 7)
+    first_bound_argument = length(ARGS) == 7 ? 6 : 5
+    lower = tryparse(Float64, ARGS[first_bound_argument])
+    upper = tryparse(Float64, ARGS[first_bound_argument + 1])
     isnothing(lower) && error("SPECTRAL_LOWER must be a float")
     isnothing(upper) && error("SPECTRAL_UPPER must be a float")
     isfinite(lower) && isfinite(upper) && lower < upper || error("spectral bounds must be finite and strictly ordered")
     (lower, upper)
 else
     campaign_bounds
+end
+
+if backend == :cuda
+    @eval using CUDA
+    CUDA.functional() || error("CUDA is not functional on this node")
+end
+to_device = backend == :cuda ? (value -> ITensors.adapt(CUDA.CuArray, value)) : identity
+synchronize_backend() = backend == :cuda ? CUDA.synchronize() : nothing
+device_name = backend == :cuda ? CUDA.name(CUDA.device()) : "CPU"
+device_total_memory = backend == :cuda ? CUDA.total_memory() : 0
+device_free_memory_before = backend == :cuda ? CUDA.free_memory() : 0
+
+function backend_timed(f)
+    synchronize_backend()
+    measurement = @timed begin
+        value = f()
+        synchronize_backend()
+        value
+    end
+    return measurement
 end
 N = 2 ^ params.L
 Ne = round(Int, N * params.density)
@@ -72,10 +99,17 @@ mkpath(output)
 cp(campaign_file, joinpath(output, "input.jl"))
 
 sys = System(params)
-initialization = @timed construct_rho_0(
+if backend == :cuda
+    sys.H0 = to_device(sys.H0)
+    sys.VH = to_device(sys.VH)
+    sys.VF = to_device(sys.VF)
+end
+initialization = backend_timed() do
+    construct_rho_0(
     sys, params, bounds[1], bounds[2]; method=:sp2,
-    verify_spectral_bounds=false,
-)
+    verify_spectral_bounds=false, to_gpu=to_device,
+    )
+end
 rho = initialization.value
 trace_tolerance = MPO_MeanField._sp2_trace_tolerance(params, Ne)
 hermiticity_tolerance = MPO_MeanField._sp2_hermiticity_tolerance(params)
@@ -102,7 +136,7 @@ open(joinpath(output, "iterations.csv"), "w") do io
         global rho, previous_idempotency, stagnant_steps, converged
         global termination_reason, last_trace, last_trace_error
         global last_idempotency, last_hermiticity, last_iteration
-        step = @timed begin
+        step = backend_timed() do
             rho_squared = apply(rho, rho;
                 cutoff=params.itensors_tol, maxdim=params.itensors_maxdim,
             )
@@ -154,6 +188,30 @@ open(joinpath(output, "iterations.csv"), "w") do io
     end
 end
 
+device_free_memory_after = backend == :cuda ? CUDA.free_memory() : 0
+if backend == :cuda
+    open(joinpath(output, "cuda_status.txt"), "w") do io
+        CUDA.versioninfo(io)
+        println(io)
+        CUDA.pool_status(io)
+    end
+end
+
+# A checkpoint is opt-in so the established diagnostic remains lightweight.
+# HDF5 serialization is host-side; move only the final compressed state back
+# after the timed purification has completed.
+checkpoint_path = get(ENV, "MPO_FIXED_SP2_CHECKPOINT", "")
+if !isempty(checkpoint_path)
+    ispath(checkpoint_path) && error("refusing to overwrite checkpoint: $checkpoint_path")
+    sys.ρ = backend == :cuda ? ITensors.adapt(Array, rho) : rho
+    if backend == :cuda
+        sys.H0 = ITensors.adapt(Array, sys.H0)
+        sys.VH = ITensors.adapt(Array, sys.VH)
+        sys.VF = ITensors.adapt(Array, sys.VF)
+    end
+    write_mpo_checkpoint(sys, checkpoint_path)
+end
+
 open(joinpath(output, "summary.toml"), "w") do io
     TOML.print(io, Dict(
         "campaign" => string(campaign.name), "label" => string(spec.label),
@@ -162,6 +220,10 @@ open(joinpath(output, "summary.toml"), "w") do io
         "spectral_lower" => bounds[1], "spectral_upper" => bounds[2],
         "campaign_spectral_lower" => campaign_bounds[1],
         "campaign_spectral_upper" => campaign_bounds[2],
+        "backend" => string(backend), "device_name" => device_name,
+        "device_total_memory_bytes" => device_total_memory,
+        "device_free_memory_before_bytes" => device_free_memory_before,
+        "device_free_memory_after_bytes" => device_free_memory_after,
         "itensors_tol" => params.itensors_tol, "itensors_maxdim" => maxdim,
         "purification_steps" => params.purification_steps,
         "trace_tolerance" => trace_tolerance,
@@ -178,6 +240,7 @@ open(joinpath(output, "summary.toml"), "w") do io
         "final_trace_error" => last_trace_error,
         "final_idempotency_residual" => last_idempotency,
         "final_hermiticity_residual" => last_hermiticity,
+        "checkpoint_path" => isempty(checkpoint_path) ? "" : abspath(checkpoint_path),
     ))
 end
 open(joinpath(output, "metadata.toml"), "w") do io

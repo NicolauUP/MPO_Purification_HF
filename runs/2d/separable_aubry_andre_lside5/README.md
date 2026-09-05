@@ -344,3 +344,117 @@ The relative trace tolerance is converted to the size-aware absolute
 tolerance `Ne*1e-6`; it is used only for convergence acceptance. SP2 branch
 selection retains its original numerical tolerance. Results are written to
 `$MPO_RESULTS_ROOT/square_lside5_sp2_error_budget_gap2/`.
+
+## Zip-up versus variational square compression
+
+`submit_sp2_variational_square.slurm` is an isolated fixed-Hamiltonian
+diagnostic for the quasiperiodic `V2=0.5` case. It does not run SCF. At each
+SP2 step it builds a `maxdim=1024` reference square, then compares:
+
+- the existing one-pass `apply(rho, rho)` zip-up truncation;
+- a two-sweep global variational compression initialized from that zip-up
+  square and fitted to the explicit high-cap reference;
+- a two-sweep implicit variational compression of `rho*rho`, represented as
+  an MPO acting on a vectorized MPO without constructing the high-cap product.
+
+The two array tasks use target caps 256 and 512. Read `iterations.csv` to
+compare `square_relative_error` and `relative_exact_projector_error` between
+the two independently advanced trajectories. This experiment is deliberately
+restricted to `L_side=5`; the high-cap reference square is a validation tool,
+not a proposed production algorithm.
+
+Before attempting that full comparison on an accelerator, validate the
+variational fitting paths with three small GPU iterations:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_sp2_variational_square_cuda_smoke.slurm
+```
+
+This requests one H100 and uses target `maxdim=256`, reference `maxdim=512`,
+two fitting sweeps, and three SP2 iterations. It records both a one-second
+`nvidia-smi` memory trace and synchronized CUDA timings. Passing this smoke
+test establishes backend coverage only; it does not establish convergence or
+justify replacing production zip-up multiplication.
+
+After the Float64 smoke test reproduces the CPU branch sequence and
+compression errors, submit the complete two-cap GPU comparison with:
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_sp2_variational_square_cuda.slurm
+```
+
+This runs 20 fixed-H iterations at target caps 256 and 512, each against a
+reference cap of 1024. Results and one-second GPU-memory traces are placed
+under
+`$MPO_RESULTS_ROOT/separable_aubry_andre_lside5_sp2_square_fit_cuda_float64/`.
+
+## Implicit-only fixed-H SP2
+
+`submit_sp2_implicit_square_cuda.slurm` runs the `v2_0p5_u_1` fixed initial
+Hamiltonian on one H100 for target bond dimensions 256 and 512. It advances a
+single SP2 trajectory for at most 20 iterations using a two-sweep implicit
+variational fit for every square. It does not construct an exact projector or
+a higher-cap reference square, and it uses the current density MPO as the
+initial fit so that no explicit MPO–MPO square is required.
+
+The operational tolerances are cutoff `1e-8`, relative trace error `1e-6`, and
+idempotency residual `2e-4`. Per-iteration fit/update timings, bond dimensions,
+and free device memory are written to `iterations.csv`; Slurm also samples
+whole-process GPU memory once per second.
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_sp2_implicit_square_cuda.slurm
+```
+
+## Sparse-vector KPM local-observable diagnostic
+
+`submit_kpm_local_cuda.slurm` tests a different representation: it never
+constructs an MPO density matrix. For the fixed initial `v2_0p5_u_1`
+Hamiltonian, it applies a Jackson-damped Chebyshev approximation to blocks of
+probing vectors and estimates only `rho[i,i]` and open-boundary
+nearest-neighbour `rho[i,j]`. Exact diagonalization supplies the independent
+reference. This is not an SCF run.
+
+Array tasks 1--3 use all 1024 Hadamard probes at 128, 256, and 512 moments.
+Because `Z*Z'/1024=I`, these runs have no probing error and isolate the KPM
+polynomial error. Tasks 4--9 hold 512 moments and compare randomized Hadamard
+and Rademacher sets with 32, 128, and 512 probes. They measure the extra local
+probing error relevant to a scalable calculation.
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_kpm_local_cuda.slurm
+```
+
+Each task writes `summary.toml`, `density.csv`, `bonds.csv`, a process resource
+report, and a one-second GPU-memory trace under
+`$MPO_RESULTS_ROOT/separable_aubry_andre_lside5_kpm_local/`. The supplied
+`[-4.1,4.1]` interval is validated against the exact fixed-H spectrum before
+the recurrence starts. Density and bond tables include the across-probe sample
+variance, variance divided by the absolute estimated mean, coefficient of
+variation, and naive relative standard error. The latter is a statistical
+standard error for independent Rademacher probes; Hadamard columns are
+correlated, and the complete Hadamard reconstruction is instead exact by
+orthogonality. `probe_statistics.csv` also records the error distribution of
+every individual probe against exact diagonalization.
+
+## Complete KPM-SCF versus dense HF
+
+The strict comparison runs the complete self-consistent `V2=0.5`, `U=1`
+calculation twice on the same `32 x 32` open square: once with KPM local
+observables and once with independent dense diagonalization. The KPM path uses
+all `N=1024` Hadamard vectors, so this comparison has polynomial error but no
+probing error. Both solvers require two consecutive iterations below the
+relative SCF tolerance `2e-4`.
+
+```bash
+sbatch --export=ALL,MPO_RESULTS_ROOT="$MPO_RESULTS_ROOT" \
+  runs/2d/separable_aubry_andre_lside5/submit_kpm_dense_strict_comparison.slurm
+```
+
+The job writes both complete result trees and a key-aligned
+`comparison.toml` under
+`$MPO_RESULTS_ROOT/kpm_dense_lside5_strict/job_<job-id>/`.
